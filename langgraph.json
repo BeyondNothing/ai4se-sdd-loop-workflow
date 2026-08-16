@@ -1,0 +1,10 @@
+{
+  "graphs": {
+    "dev_workflow": {
+      "path": "src.graph:graph",
+      "description": "需求 → 计划 → 任务 → 代码 → 测试 工程化 Workflow"
+    }
+  },
+  "env": "./.env",
+  "dependencies": ["."]
+}

@@ -1,0 +1,105 @@
+"""按需求划分 docs 产出目录。"""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from datetime import datetime
+from pathlib import Path
+
+
+def sanitize_slug(text: str, max_len: int = 60) -> str:
+    """生成适合目录名的 slug（保留中文）。"""
+    text = text.strip()
+    text = re.sub(r"^#+\s*", "", text)
+    text = text.lower()
+    text = re.sub(r'[\\/:*?"<>|\s]+', "-", text)
+    text = re.sub(r"-{2,}", "-", text).strip("-._")
+    return text[:max_len].rstrip("-._")
+
+
+def make_requirement_slug(
+    requirement: str,
+    *,
+    name: str | None = None,
+    source_file: Path | None = None,
+) -> str:
+    """推导本次运行对应的需求目录名。"""
+    if name:
+        slug = sanitize_slug(name)
+        if slug:
+            return slug
+
+    if source_file is not None:
+        stem = source_file.stem
+        for suffix in ("-requirement", "_requirement", "-req", "_req"):
+            if stem.lower().endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        slug = sanitize_slug(stem)
+        if slug:
+            return slug
+
+    for line in requirement.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        slug = sanitize_slug(line)
+        if slug:
+            return slug
+
+    digest = hashlib.sha1(requirement.encode("utf-8")).hexdigest()[:8]
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return f"req-{stamp}-{digest}"
+
+
+def resolve_requirement_docs_dir(
+    project_root: Path,
+    base_docs_dir: str,
+    requirement: str,
+    *,
+    docs_dir: str | None = None,
+    name: str | None = None,
+    source_file: Path | None = None,
+) -> tuple[str, str]:
+    """
+    解析本次需求的产出目录。
+
+    返回 (相对 project_root 的 docs_dir, requirement_slug)。
+    默认结构: docs/<requirement-slug>/
+    """
+    if docs_dir:
+        path = Path(docs_dir)
+        if not path.is_absolute():
+            path = project_root / path
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "draft").mkdir(parents=True, exist_ok=True)
+        try:
+            relative = str(path.relative_to(project_root))
+        except ValueError:
+            relative = str(path)
+        slug = path.name
+        return relative, slug
+
+    slug = make_requirement_slug(
+        requirement, name=name, source_file=source_file
+    )
+    base = Path(base_docs_dir)
+    if not base.is_absolute():
+        target = project_root / base / slug
+        relative = str(base / slug)
+    else:
+        target = base / slug
+        relative = str(target)
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "draft").mkdir(parents=True, exist_ok=True)
+    return relative, slug
+
+
+def save_original_requirement(docs_dir: Path, requirement: str) -> Path:
+    """将原始需求写入需求目录，便于追溯。"""
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    path = docs_dir / "00-requirement.md"
+    if not path.exists():
+        path.write_text(requirement, encoding="utf-8")
+    return path

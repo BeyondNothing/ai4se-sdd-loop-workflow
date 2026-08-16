@@ -1,0 +1,120 @@
+workflow:
+  docs_dir: docs
+  project_rules_dir: project-rules
+  e2e:
+    enabled: false   # false 时跳过浏览器 E2E（verify_tests 仍执行单元/API 测试）
+    base_url: http://localhost:8080
+
+nodes:
+  analyze_requirements:
+    name: 需求分析与澄清
+    tool: cursor
+    mode: interactive
+    prompt: prompts/01_requirements.md
+    output: 01-requirements.md
+    extend_rules:
+      - ddd-design-standard.md
+    inputs:
+      - state: requirement
+      - doc: 01-requirements.draft.md
+      - doc: 01-requirements.md
+
+  create_plan:
+    name: 制定计划
+    tool: cursor
+    mode: headless
+    prompt: prompts/02_create_plan.md
+    output: 02-plan.md
+    extend_rules:
+      - ddd-design-standard.md
+    inputs:
+      - doc: 01-requirements.md
+      - state: requirement_type
+      - state: requirement_summary
+      - state: change_scope
+      - state: affected_modules
+      - state: compatibility_risk
+
+  design_test_cases:
+    name: 设计测试用例
+    tool: cursor
+    mode: headless
+    prompt: prompts/02_design_test_cases.md
+    output: 02-test-cases.md
+    extend_rules:
+      - ddd-design-standard.md
+    inputs:
+      - doc: 01-requirements.md
+      - state: requirement_type
+      - state: requirement_summary
+      - state: change_scope
+      - state: affected_modules
+
+  review_plan_and_tests:
+    name: 计划与测试用例评审
+    tool: cursor
+    mode: interactive
+    prompt: prompts/02_review_plan_and_tests.md
+    output: 02-plan-test-review.md
+    extend_rules:
+      - ddd-design-standard.md
+    inputs:
+      - doc: 01-requirements.md
+      - doc: 02-plan.md
+      - doc: 02-test-cases.md
+      - doc: 02-plan-test-review.draft.md
+      - doc: 02-plan-test-review.md
+      - state: requirement_type
+      - state: requirement_summary
+      - state: change_scope
+      - state: affected_modules
+      - state: compatibility_risk
+
+  split_tasks:
+    name: 任务拆分
+    tool: cursor
+    mode: interactive
+    prompt: prompts/03_split_tasks.md
+    output: 03-tasks.md
+    extend_rules:
+      - ddd-design-standard.md
+    inputs:
+      - doc: 01-requirements.md
+      - doc: 02-plan.md
+      - doc: 02-test-cases.md
+      - doc: 02-plan-test-review.md
+      - doc: 03-tasks.draft.md
+      - doc: 03-tasks.md
+      - state: requirement_type
+      - state: change_scope
+      - state: affected_modules
+
+  implement_code:
+    name: 代码实现
+    tool: cursor
+    mode: interactive
+    prompt: prompts/04_implement_code.md
+    output: 04-implementation.md
+    extend_rules:
+      - ddd-design-standard.md
+    inputs:
+      - doc: 01-requirements.md
+      - doc: 02-plan.md
+      - doc: 02-test-cases.md
+      - doc: 03-tasks.md
+      - state: requirement_type
+      - state: affected_modules
+      - state: compatibility_risk
+
+  verify_tests:
+    name: 测试自验证
+    tool: cursor
+    mode: interactive
+    prompt: prompts/05_verify_tests.md
+    output: 05-test-report.md
+    extend_rules:
+      - ddd-design-standard.md
+    inputs:
+      - doc: 02-test-cases.md
+      - doc: 03-tasks.md
+      - doc: 04-implementation.md

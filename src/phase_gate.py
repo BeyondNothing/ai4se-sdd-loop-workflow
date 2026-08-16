@@ -1,0 +1,211 @@
+"""各阶段（需求 / 计划 / 任务）完成判定 — 内容就绪 vs 用户已确认。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+from .parsers.approval_parser import parse_approval
+from .parsers.clarification_parser import parse_clarification_checklist
+from .parsers.requirement_parser import parse_requirement_metadata
+from .state import DevWorkflowState
+
+DRAFT_DIR = "draft"
+
+
+@dataclass(frozen=True)
+class PhaseConfig:
+    node_id: str
+    draft_file: str
+    final_file: str
+    approval_block: str
+    approval_state_key: str
+    next_node: str
+    min_body_chars: int = 120
+    requires_approval: bool = True
+
+
+def draft_dir(docs_dir: Path) -> Path:
+    return docs_dir / DRAFT_DIR
+
+
+def draft_path(docs_dir: Path, draft_filename: str) -> Path:
+    return docs_dir / DRAFT_DIR / draft_filename
+
+
+def resolve_draft_path(docs_dir: Path, draft_filename: str) -> Path:
+    """draft 目录下的路径；若仅有旧版平铺初稿则回退读取。"""
+    new = draft_path(docs_dir, draft_filename)
+    legacy = docs_dir / draft_filename
+    if legacy.exists() and not new.exists():
+        return legacy
+    return new
+
+
+def resolve_doc_path(docs_dir: Path, doc_key: str) -> Path:
+    if ".draft." in doc_key:
+        return resolve_draft_path(docs_dir, doc_key)
+    return docs_dir / doc_key
+
+
+def ensure_draft_dir(docs_dir: Path) -> Path:
+    path = draft_dir(docs_dir)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+PHASE_CONFIGS: dict[str, PhaseConfig] = {
+    "analyze_requirements": PhaseConfig(
+        node_id="analyze_requirements",
+        draft_file="01-requirements.draft.md",
+        final_file="01-requirements.md",
+        approval_block="requirement_approval",
+        approval_state_key="requirement_approved",
+        next_node="parallel_plan_and_tests",
+        min_body_chars=200,
+    ),
+    "create_plan": PhaseConfig(
+        node_id="create_plan",
+        draft_file="02-plan.draft.md",
+        final_file="02-plan.md",
+        approval_block="plan_approval",
+        approval_state_key="plan_approved",
+        next_node="review_plan_and_tests",
+        min_body_chars=200,
+        requires_approval=False,
+    ),
+    "design_test_cases": PhaseConfig(
+        node_id="design_test_cases",
+        draft_file="02-test-cases.draft.md",
+        final_file="02-test-cases.md",
+        approval_block="test_cases_approval",
+        approval_state_key="test_cases_approved",
+        next_node="review_plan_and_tests",
+        min_body_chars=200,
+        requires_approval=False,
+    ),
+    "review_plan_and_tests": PhaseConfig(
+        node_id="review_plan_and_tests",
+        draft_file="02-plan-test-review.draft.md",
+        final_file="02-plan-test-review.md",
+        approval_block="review_plan_tests_approval",
+        approval_state_key="review_plan_tests_approved",
+        next_node="split_tasks",
+        min_body_chars=120,
+    ),
+    "split_tasks": PhaseConfig(
+        node_id="split_tasks",
+        draft_file="03-tasks.draft.md",
+        final_file="03-tasks.md",
+        approval_block="tasks_approval",
+        approval_state_key="tasks_approved",
+        next_node="implement_code",
+        min_body_chars=200,
+    ),
+}
+
+
+def get_phase_config(node_id: str) -> PhaseConfig | None:
+    return PHASE_CONFIGS.get(node_id)
+
+
+def _body_without_status(content: str) -> str:
+    if "## Workflow 状态" in content:
+        content = content.split("## Workflow 状态", 1)[0]
+    return content.strip()
+
+
+def _checklist_ready(content: str, state: DevWorkflowState) -> bool:
+    if state.get("skip_clarification"):
+        return True
+    checklist = parse_clarification_checklist(content)
+    return checklist.all_resolved or not checklist.items
+
+
+def _validate_requirements_final(content: str) -> bool:
+    metadata = parse_requirement_metadata(content)
+    return bool(metadata.requirement_type and metadata.requirement_type != "unknown")
+
+
+def _validate_generic_final(content: str, cfg: PhaseConfig) -> bool:
+    body = _body_without_status(content)
+    if len(body) < cfg.min_body_chars:
+        return False
+    return "##" in body or len(body.splitlines()) >= 8
+
+
+CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
+    "analyze_requirements": lambda content, cfg: _validate_generic_final(content, cfg)
+    and _validate_requirements_final(content),
+    "create_plan": _validate_generic_final,
+    "design_test_cases": _validate_generic_final,
+    "review_plan_and_tests": _validate_generic_final,
+    "split_tasks": _validate_generic_final,
+}
+
+
+def phase_content_ready(docs_dir: Path, node_id: str, state: DevWorkflowState) -> bool:
+    """定稿 md 结构完整（澄清清单 + 正文），不要求用户确认。"""
+    cfg = PHASE_CONFIGS.get(node_id)
+    if not cfg:
+        return False
+
+    final_path = docs_dir / cfg.final_file
+    if not final_path.exists():
+        return False
+
+    content = final_path.read_text(encoding="utf-8")
+    if not _checklist_ready(content, state):
+        return False
+
+    validator = CONTENT_VALIDATORS.get(node_id, _validate_generic_final)
+    return validator(content, cfg)
+
+
+def phase_user_approved(docs_dir: Path, node_id: str) -> bool:
+    cfg = PHASE_CONFIGS.get(node_id)
+    if not cfg:
+        return False
+
+    final_path = docs_dir / cfg.final_file
+    if not final_path.exists():
+        return False
+
+    approval = parse_approval(final_path.read_text(encoding="utf-8"), cfg.approval_block)
+    return approval.is_approved
+
+
+def phase_complete(docs_dir: Path, node_id: str, state: DevWorkflowState) -> bool:
+    """定稿内容就绪且（若需要）用户已确认，可进入下一阶段。"""
+    if not phase_content_ready(docs_dir, node_id, state):
+        return False
+    cfg = PHASE_CONFIGS.get(node_id)
+    if cfg and not cfg.requires_approval:
+        return True
+    return phase_user_approved(docs_dir, node_id)
+
+
+def plan_and_tests_content_ready(docs_dir: Path, state: DevWorkflowState) -> bool:
+    return phase_content_ready(docs_dir, "create_plan", state) and phase_content_ready(
+        docs_dir, "design_test_cases", state
+    )
+
+
+def review_plan_tests_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
+    """Review 节点完成：review 定稿确认，且 plan / test-cases 均已同步并确认。"""
+    if not phase_complete(docs_dir, "review_plan_and_tests", state):
+        return False
+    return phase_user_approved(docs_dir, "create_plan") and phase_user_approved(
+        docs_dir, "design_test_cases"
+    )
+
+
+# --- 兼容旧 API ---
+
+def requirements_content_ready(docs_dir: Path, state: DevWorkflowState) -> bool:
+    return phase_content_ready(docs_dir, "analyze_requirements", state)
+
+
+def requirements_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
+    return phase_complete(docs_dir, "analyze_requirements", state)

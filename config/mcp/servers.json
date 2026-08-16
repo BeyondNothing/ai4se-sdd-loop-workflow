@@ -1,0 +1,14 @@
+{
+  "_meta": {
+    "modelscope": "https://modelscope.cn/mcp/servers/@microsoft/playwright-mcp",
+    "upstream": "https://github.com/microsoft/playwright-mcp",
+    "npm": "@playwright/mcp@latest",
+    "note": "Playwright MCP 经 scripts/playwright-mcp.sh 启动；sync 时写入本机仓库内脚本绝对路径"
+  },
+  "servers": {
+    "playwright": {
+      "enabled": true,
+      "wrapper": "scripts/playwright-mcp.sh"
+    }
+  }
+}
