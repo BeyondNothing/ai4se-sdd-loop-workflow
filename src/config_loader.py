@@ -29,7 +29,7 @@ class NodeConfig:
 class WorkflowConfig:
     docs_dir: str
     nodes: dict[str, NodeConfig]
-    project_rules_dir: str = "project-rules"
+    ai_rules_dir: str = "ai-rules"
     app_root: str = ".."
     e2e_enabled: bool = True
     e2e_base_url: str = "http://localhost:8080"
@@ -80,6 +80,11 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
     e2e_base_url = str(e2e.get("base_url") or "http://localhost:8080").strip().rstrip("/")
     e2e_enabled = _parse_bool(e2e.get("enabled"), default=True)
     app_root = str(workflow.get("app_root") or "..").strip() or ".."
+    ai_rules_dir = str(
+        workflow.get("ai_rules_dir")
+        or workflow.get("project_rules_dir")
+        or "ai-rules"
+    ).strip() or "ai-rules"
 
     nodes: dict[str, NodeConfig] = {}
     for node_id, cfg in nodes_raw.items():
@@ -96,7 +101,7 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
 
     return WorkflowConfig(
         docs_dir=workflow.get("docs_dir", "docs"),
-        project_rules_dir=workflow.get("project_rules_dir", "project-rules"),
+        ai_rules_dir=ai_rules_dir,
         app_root=app_root,
         e2e_enabled=e2e_enabled,
         e2e_base_url=e2e_base_url,

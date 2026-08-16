@@ -31,7 +31,7 @@ LangGraph 负责编排（状态管理、节点调度、续跑路由）；每个�
 
 ### 2.2 节点即独立 Agent
 
-1. 加载 `prompts/` 模板，注入 `{{project_rules}}`、doc、state 变量
+1. 加载 `prompts/` 模板，注入 `{{ai_rules}}`、doc、state 变量
 2. 调用节点配置的 AI 工具（`cursor` / `claude_code` / `echo`）
 3. 将产出写入 **应用项目根** `docs/<需求名>/`（非 `dev-workflow/` 内）
 
@@ -43,7 +43,7 @@ LangGraph 负责编排（状态管理、节点调度、续跑路由）；每个�
 |------|------|------|
 | 图编排 | `src/workflow.py` | 节点、边、并行 plan/test、门禁路由 |
 | 节点执行 | `config/workflow.yaml` | tool、mode、prompt、inputs、extend_rules |
-| 项目规则 | `project-rules/` | DDD 等约束，按节点 `extend_rules` 注入 |
+| 扩展规则 | `<app_root>/ai-rules/` | 按节点 `extend_rules` 注入 prompt |
 | 续跑逻辑 | `src/router.py` | 读 docs 决定启动节点 |
 
 ### 2.4 Workflow 级配置
@@ -52,7 +52,7 @@ LangGraph 负责编排（状态管理、节点调度、续跑路由）；每个�
 workflow:
   app_root: ..              # 应用项目根（相对 dev-workflow/）
   docs_dir: docs            # 产出: <app_root>/docs/<需求名>/
-  project_rules_dir: project-rules
+  ai_rules_dir: ai-rules     # 相对 app_root
   e2e:
     enabled: true          # false 时跳过浏览器 E2E
     base_url: http://localhost:8080
@@ -62,7 +62,7 @@ workflow:
 |--------|------|------|
 | `app_root` | 应用项目根（业务代码 + docs 产出） | `..` |
 | `docs_dir` | 产出相对 app_root 的子目录 | `docs` |
-| `project_rules_dir` | 项目规则（位于 dev-workflow 内） | `project-rules` |
+| `ai_rules_dir` | 扩展规则目录（相对 app_root） | `ai-rules` |
 | `e2e.enabled` | 是否执行浏览器 E2E（Playwright MCP） | `true` |
 | `e2e.base_url` | E2E 服务基址（host/端口） | `http://localhost:8080` |
 
@@ -88,7 +88,7 @@ workflow:
 └─────────────────────────────────────────────────────────┘
 ```
 
-业务代码通常在 **应用项目根**（`workflow.app_root`，默认 `dev-workflow/` 的上级）。`implement_code` 与 `verify_tests` 在 `app_root` 启动 agent；编排配置、prompt、project-rules 仍在 `dev-workflow/`。
+业务代码、docs 产出与 **ai-rules** 均在 **应用项目根**（`workflow.app_root`）。`dev-workflow/` 仅保留编排配置与 prompts。
 
 ---
 
@@ -188,7 +188,7 @@ YAML 中还定义 `create_plan`、`design_test_cases` 两个 headless 子节点�
 
 ---
 
-## 6. 项目规则（project-rules）
+## 6. 扩展规则（ai-rules）
 
 各节点可在 YAML 中配置：
 
@@ -197,7 +197,7 @@ extend_rules:
   - ddd-design-standard.md
 ```
 
-`NodeRunner` 读取 `project-rules/` 下文件，拼入 prompt 的 `{{project_rules}}`。默认含 `ddd-design-standard.md`（DDD 四层、依赖方向、测试落地要求等）。
+`NodeRunner` 从 `<app_root>/<ai_rules_dir>/`（默认 `ai-rules/`）读取文件，拼入 prompt 的 `{{ai_rules}}`。规则文件归属应用项目，不放在 `dev-workflow/` 内。
 
 ---
 
@@ -273,7 +273,7 @@ analyze_requirements:
 
 - **state**：`{{requirement}}`、`{{project_root}}`、`{{requirement_type}}` …
 - **doc**：`{{doc_01-requirements.md}}` — 读取当前需求目录下对应文件
-- **project_rules**：`{{project_rules}}` — 来自 `extend_rules`
+- **ai_rules**：`{{ai_rules}}` — 来自 `extend_rules` + `workflow.ai_rules_dir`
 - **verify 专用**：`{{e2e_enabled}}`、`{{e2e_base_url}}`
 
 ---
@@ -310,34 +310,23 @@ dev-workflow/
 │   └── mcp/
 │       └── servers.json        # Playwright MCP（E2E）
 │
-├── project-rules/
-│   └── ddd-design-standard.md
-│
 ├── prompts/
-│   ├── 01_requirements.md
-│   ├── 02_create_plan.md
-│   ├── 02_design_test_cases.md
-│   ├── 02_review_plan_and_tests.md
-│   ├── 03_split_tasks.md
-│   ├── 04_implement_code.md
-│   └── 05_verify_tests.md
+│   └── ...
 │
-├── examples/                   # 示例需求
-│
-├── scripts/
-│   └── playwright-mcp.sh       # MCP 启动包装
-│
+├── examples/
 └── src/
-    └── ...
 ```
 
-运行时产出在 **应用项目根**（非本目录）：
+应用项目根（默认 `dev-workflow/..`）：
 
 ```text
-<app_root>/docs/<requirement-slug>/   # 默认 ../docs/...
+<app_root>/
+├── ai-rules/                   # 扩展规则（如 ddd-design-standard.md）
+├── docs/<requirement-slug>/    # workflow 运行时产出
+└── src/main/ ...
 ```
 
-若曾使用 `dev-workflow/docs/`，请迁移到 `<app_root>/docs/` 后续跑。
+`dev-workflow/` 内**不再**包含 `docs/` 或 `ai-rules/`（均在应用项目根）。
 
 ---
 
@@ -393,7 +382,7 @@ langgraph dev   # 图 ID: dev_workflow
 
 ### 新增项目规则
 
-在 `project-rules/` 添加 md，在对应节点 `extend_rules` 中引用。
+在 `<app_root>/ai-rules/` 添加 md，在对应节点 `extend_rules` 中引用。
 
 ### 调整流程
 
@@ -418,7 +407,7 @@ langgraph dev   # 图 ID: dev_workflow
 
 | 路径 | 内容 |
 |------|------|
-| `dev-workflow/` | LangGraph 编排、YAML 配置、prompts、project-rules |
-| `<app_root>/`（默认上级目录） | Spring/Java 业务代码、`docs/<需求>/` 运行时产出 |
+| `dev-workflow/` | LangGraph 编排、YAML 配置、prompts |
+| `<app_root>/` | 业务代码、`ai-rules/`、`docs/` |
 
 `workflow.app_root` 可在 `config/workflow.yaml` 中改为绝对路径或其它相对路径。

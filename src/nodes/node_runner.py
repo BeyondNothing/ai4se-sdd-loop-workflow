@@ -9,7 +9,7 @@ from pathlib import Path
 from ..agents.registry import get_ai_tool
 from ..config_loader import NodeConfig, WorkflowConfig
 from ..requirement_dir import resolve_app_root, resolve_docs_path
-from ..project_rules_loader import build_project_rules_prompt
+from ..ai_rules_loader import build_ai_rules_prompt
 from ..parsers.clarification_parser import parse_clarification_checklist
 from ..parsers.approval_parser import (
     parse_plan_approval,
@@ -506,10 +506,11 @@ class NodeRunner:
             )
             context.update(meta.to_context())
 
-        context["project_rules"] = build_project_rules_prompt(
+        context["ai_rules"] = build_ai_rules_prompt(
             self.project_root,
             node_cfg.extend_rules,
-            rules_dir=self.workflow_config.project_rules_dir,
+            rules_dir=self.workflow_config.ai_rules_dir,
+            app_root=state.get("app_root") or self.workflow_config.app_root,
         )
 
         return context
