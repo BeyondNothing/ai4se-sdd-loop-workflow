@@ -38,12 +38,12 @@ def main():
     parser.add_argument(
         "--name", "-n",
         default=None,
-        help="需求目录名（默认从文件名或需求首行推导），产出落在 docs/<name>/",
+        help="需求目录名（默认从文件名或需求首行推导），产出落在 <应用根>/docs/<name>/",
     )
     parser.add_argument(
         "--docs-dir",
         default=None,
-        help="覆盖完整产出目录；默认 docs/<需求名>/",
+        help="覆盖完整产出目录（相对应用根或绝对路径；默认 <应用根>/docs/<需求名>/）",
     )
     parser.add_argument(
         "--config",

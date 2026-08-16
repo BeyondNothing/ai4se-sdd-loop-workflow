@@ -2,7 +2,7 @@
 
 从**原始需求**到**代码实现**再到**测试自验证**的工程化 Workflow 系统。
 
-LangGraph 只负责 workflow 的编排（状态管理、节点调度）；每个节点是独立的 agent，通过 YAML 配置指定 AI 工具与 prompt，产出以 Markdown 写入 `docs/<需求名>/` 目录（每个需求独立子目录）。流程在 `src/workflow.py` 中固定定义。
+LangGraph 负责编排（状态管理、节点调度、续跑路由）；每个节点是独立 agent，通过 YAML 配置指定 AI 工具与 prompt，产出以 Markdown 写入 **应用项目根** 下的 `docs/<需求名>/`（默认 `dev-workflow/` 的上级目录）。流程拓扑在 `src/workflow.py` 中固定定义，节点行为在 `config/workflow.yaml` 中配置。
 
 ---
 
@@ -10,12 +10,12 @@ LangGraph 只负责 workflow 的编排（状态管理、节点调度）；每个
 
 | 目标 | 说明 |
 |------|------|
-| **流程标准化** | 将「需求 → 文档 → 计划 → 任务 → 代码 → 测试」固化为可重复执行的 pipeline |
-| **职责分离** | LangGraph 管编排，节点管执行，AI 工具管调用，三者互不耦合 |
-| **节点隔离** | 每个节点是独立 agent，不共享会话上下文，避免上下文污染 |
-| **最小依赖** | 核心仅依赖 LangGraph + PyYAML，不引入 LLM SDK 作为硬依赖 |
-| **可配置** | 节点工具、prompt、输入输出外置到 YAML；流程编排在代码中固定定义 |
-| **可追溯** | 每个节点产出独立 Markdown 文件，便于审查、版本管理和人工介入 |
+| **流程标准化** | 将「需求 → 计划/用例 → 评审 → 任务 → 代码 → 测试」固化为可重复 pipeline |
+| **职责分离** | LangGraph 管编排，NodeRunner 管执行，AI 工具管调用 |
+| **节点隔离** | 各节点不共享 AI 会话，仅通过 Markdown 传递上下文 |
+| **最小依赖** | 核心依赖 LangGraph + PyYAML，LLM 能力由外部 CLI 提供 |
+| **可配置** | 工具、prompt、项目规则外置 YAML；图结构在代码中固定 |
+| **可追溯** | 每阶段独立 md + Workflow 状态表，支持续跑与 Code Review |
 
 ---
 
@@ -23,52 +23,50 @@ LangGraph 只负责 workflow 的编排（状态管理、节点调度）；每个
 
 ### 2.1 LangGraph 只做编排
 
-LangGraph 在本系统中**不包含任何业务逻辑**，仅承担：
+- **状态管理** — 在节点间传递 `requirement`、`resume_from_node`、`test_passed` 等
+- **节点调度** — 按固定图执行；阶段门禁（approval / content ready）决定是否进入下一节点
+- **续跑路由** — 启动时读 `docs/` 已有产出，决定 `resume_from_node`（见 §4.3）
 
-- **状态管理** — 在节点间传递 `requirement`、`test_passed` 等字段
-- **节点调度** — 按固定顺序依次执行 5 个节点
-
-节点的具体行为（读什么 prompt、调什么工具、写哪个文件）由 `NodeRunner` + YAML 配置驱动；节点顺序和边在 `src/workflow.py` 中写死。
+节点具体行为（prompt、工具、读写哪些 doc）由 `NodeRunner` + YAML 驱动。
 
 ### 2.2 节点即独立 Agent
 
-每个节点在执行时：
+1. 加载 `prompts/` 模板，注入 `{{project_rules}}`、doc、state 变量
+2. 调用节点配置的 AI 工具（`cursor` / `claude_code` / `echo`）
+3. 将产出写入 **应用项目根** `docs/<需求名>/`（非 `dev-workflow/` 内）
 
-1. 从 `prompts/` 加载 prompt 模板
-2. 从 `docs/` 或 state 读取上游输入
-3. 调用**当前节点配置的** AI 工具（Cursor / Claude Code / Echo）
-4. 将结果写入 `docs/<需求名>/` 下对应的 Markdown 文件
-
-各节点之间**不共享 AI 会话**。上游信息仅通过 Markdown 文档传递，保证每个 agent 的输入边界清晰、可审计。
+**不共享 AI 会话**；上游信息仅通过 Markdown 与 state 字段传递。
 
 ### 2.3 流程固定，配置分离
 
-- **流程编排**（节点顺序、边）写在 `src/workflow.py`，改流程直接改代码
-- **节点执行配置**（工具、prompt、输入）写在 `config/workflow.yaml`
+| 层级 | 位置 | 内容 |
+|------|------|------|
+| 图编排 | `src/workflow.py` | 节点、边、并行 plan/test、门禁路由 |
+| 节点执行 | `config/workflow.yaml` | tool、mode、prompt、inputs、extend_rules |
+| 项目规则 | `project-rules/` | DDD 等约束，按节点 `extend_rules` 注入 |
+| 续跑逻辑 | `src/router.py` | 读 docs 决定启动节点 |
 
-### 2.4 Workflow 级配置（`workflow.yaml` → `workflow`）
-
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| `docs_dir` | 产出根目录 | `docs` |
-| `project_rules_dir` | 项目规则目录 | `project-rules` |
-| `e2e.enabled` | 是否执行浏览器 E2E（Playwright MCP） | `true` |
-| `e2e.base_url` | E2E 服务基址（host/端口） | `http://localhost:8080` |
-
-关闭 E2E 示例：
+### 2.4 Workflow 级配置
 
 ```yaml
 workflow:
+  app_root: ..              # 应用项目根（相对 dev-workflow/）
+  docs_dir: docs            # 产出: <app_root>/docs/<需求名>/
+  project_rules_dir: project-rules
   e2e:
-    enabled: false
+    enabled: true          # false 时跳过浏览器 E2E
     base_url: http://localhost:8080
 ```
 
-效果：
+| 配置项 | 说明 | 默认 |
+|--------|------|------|
+| `app_root` | 应用项目根（业务代码 + docs 产出） | `..` |
+| `docs_dir` | 产出相对 app_root 的子目录 | `docs` |
+| `project_rules_dir` | 项目规则（位于 dev-workflow 内） | `project-rules` |
+| `e2e.enabled` | 是否执行浏览器 E2E（Playwright MCP） | `true` |
+| `e2e.base_url` | E2E 服务基址（host/端口） | `http://localhost:8080` |
 
-- `verify_tests` 仍执行 **单元测试 + API 测试**；`TC-E2E-*` 在报告中标记 **skip**（配置跳过，不算失败）
-- 启动时**跳过** Playwright MCP 自动配置（与 `--skip-mcp-setup` 等效，仅针对 E2E）
-- `verify_tests` prompt 通过 `{{e2e_enabled}}` / `{{e2e_base_url}}` 告知 Agent 当前配置
+`e2e.enabled: false` 时：`verify_tests` 仍执行单元/API 测试；`TC-E2E-*` 在报告中标 **skip**（不算失败）；启动时跳过 Playwright MCP 同步。
 
 ---
 
@@ -76,412 +74,351 @@ workflow:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                     LangGraph 编排层                      │
-│  StateGraph → 固定线性调度                                │
+│  LangGraph（workflow.py + router.py）                    │
+│  route_next → 各阶段节点 → 门禁边 → END                  │
 └──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────┐
-│                   NodeRunner 执行层                       │
-│  加载配置 → 渲染 prompt → 调用工具 → 写入 docs/<需求名>/   │
+│  NodeRunner（node_runner.py）                            │
+│  渲染 prompt → 调用 AITool → 写 docs / 补 Workflow 状态   │
 └──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────┐
-│                   AITool 适配层                           │
-│  CursorTool │ ClaudeCodeTool │ EchoTool                  │
+│  AITool：cursor │ claude_code │ echo                     │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 三层职责
-
-| 层级 | 模块 | 职责 |
-|------|------|------|
-| **编排层** | `src/workflow.py` | 固定定义 LangGraph 节点与边 |
-| **执行层** | `src/nodes/node_runner.py` | 通用节点执行器，所有节点共用同一套逻辑 |
-| **工具层** | `src/agents/` | AI 编程工具的适配器，统一 `run(prompt, cwd)` 接口 |
+业务代码通常在 **应用项目根**（`workflow.app_root`，默认 `dev-workflow/` 的上级）。`implement_code` 与 `verify_tests` 在 `app_root` 启动 agent；编排配置、prompt、project-rules 仍在 `dev-workflow/`。
 
 ---
 
 ## 4. Workflow 流程
 
+### 4.1 流程图
+
 ```mermaid
 flowchart TD
-    START([原始需求]) --> ROUTE[route_next 启动路由]
-    ROUTE --> A[需求分析与澄清]
-    ROUTE --> B[制定计划]
-    A -->|定稿完成| B
-    A -->|会话异常中断| PAUSE([续跑 analyze_requirements])
-    B --> C[任务拆分] --> D[代码实现] --> E[测试自验证] --> END([结束])
+    START([./start.sh]) --> ROUTE[route_next<br/>读 docs 定 resume_from_node]
+    ROUTE --> A[analyze_requirements<br/>interactive]
+    ROUTE --> P[parallel_plan_and_tests<br/>headless 并行]
+    ROUTE --> R[review_plan_and_tests<br/>interactive]
+    ROUTE --> T[split_tasks]
+    ROUTE --> I[implement_code]
+    ROUTE --> V[verify_tests]
+
+    A -->|requirements_complete| P
+    A -->|未完成| PAUSE([END 待续跑])
+
+    P -->|plan + test-cases 就绪| R
+    P -->|失败/未完成| PAUSE
+
+    R -->|review 完成| T
+    R -->|未完成| PAUSE
+
+    T -->|tasks approved| I
+    T -->|未完成| PAUSE
+
+    I --> V
+    V --> DONE([END<br/>05-test-report.md])
 ```
 
-### 需求分析与澄清（单节点）
+### 4.2 节点一览
 
-需求阶段合并为 **一个 interactive 节点 + 一个 prompt**（`prompts/01_requirements.md`）。在同一次 CLI 会话中完成：初稿 → **在初稿清单上与用户循环澄清** → 定稿。澄清回答直接更新 `01-requirements.draft.md` 顶部的 `clarification_checklist`，不单独输出澄清文档。
+| 节点 ID | 名称 | 模式 | 产出 | 说明 |
+|---------|------|------|------|------|
+| `analyze_requirements` | 需求分析与澄清 | **interactive** | `draft/01-requirements.draft.md` → `01-requirements.md` | 澄清清单 + 定稿 + `requirement_approval` |
+| `parallel_plan_and_tests` | 并行计划与用例 | **headless** | `02-plan.md` + `02-test-cases.md` | 线程池并行跑 `create_plan`、`design_test_cases` |
+| `review_plan_and_tests` | 计划与用例评审 | **interactive** | `02-plan-test-review.md` | 业务视角交叉比对，同步修订 plan/test |
+| `split_tasks` | 任务拆分 | **interactive** | `03-tasks.md` | API 详细设计 + `tasks_approval` |
+| `implement_code` | 代码实现 | **interactive** | 业务代码 + `04-implementation.md` | **只写生产代码**，不写测试 |
+| `verify_tests` | 测试自验证 | **interactive** | `src/test` 测试代码 + `05-test-report.md` | 严格按用例执行单元/API/E2E |
 
-**续跑不依赖 AI 工具会话 ID**：上下文通过 Markdown 文件传递。若会话异常中断，再次执行 `./start.sh` 时会注入已有初稿/定稿，Agent 从断点继续。
+YAML 中还定义 `create_plan`、`design_test_cases` 两个 headless 子节点配置，由 `parallel_plan_and_tests` 内部调用，不单独出现在图上。
 
-每个产出 md 末尾由程序写入：
+**interactive**：继承终端，用户与 Agent 对话；产出写入后 workflow 结束当前 CLI 会话，需再次 `./start.sh` 续跑下一阶段（或由单次 run 连续跑完所有已就绪门禁的节点——实际以 LangGraph 一次 invoke 为准，交互节点会在未过门禁时 END）。
 
-```markdown
-## Workflow 状态
+**headless**：`agent -p` 非交互执行，写完整 md 到磁盘。
 
-| 字段 | 值 |
-|------|-----|
-| node | analyze_requirements |
-| status | completed |
-| next_node | create_plan |
-| phase | requirements |
-| pending_count | 0 |
-| all_resolved | true |
-| updated_at | ... |
+### 4.3 续跑与 CLI 选项
+
+启动时 `determine_start_node()`（`src/router.py`）扫描 `docs/<name>/`：
+
+1. 无 `03-tasks.md` 时，优先解析 plan/test/review 阶段（有 `02-plan`+`02-test-cases` → `review_plan_and_tests` 等）
+2. 再按 checkpoint 链：`05` → `04` → `03` → `02-plan-test-review` → … → `01` → draft
+3. 各阶段需过 **phase gate**（内容就绪 + 用户 `approved`），否则回到对应 interactive 节点
+
+| 选项 | 说明 |
+|------|------|
+| `--name`, `-n` | 需求目录名，产出在 `<app_root>/docs/<name>/` |
+| `--file`, `-f` | 从文件读需求（推荐） |
+| `--skip-clarification` | 跳过需求/任务澄清 loop |
+| `--fresh` | **清除**该目录下 md（保留 `00-requirement.md`）后重来；**与续跑互斥** |
+| `--tool echo` | 调试编排，不调真实 AI |
+| `--skip-mcp-setup` | 跳过 Playwright MCP 配置 |
+
+```bash
+# 推荐入口
+./start.sh --name product-list-toc --file examples/product-list-toc-requirement.md
+
+# 续跑（不要加 --fresh）
+./start.sh --skip-clarification --name product-list-toc --file examples/product-list-toc-requirement.md
 ```
 
-- **续跑**：同一 `--name` 再执行 `./start.sh`，读最新 md 的 `next_node`
-- **重来**：`--fresh` 清除产出（保留 `00-requirement.md`）
-- **跳过澄清**：`--skip-clarification`（初稿无 pending 时可直接提升为定稿）
-
-### 各节点说明
-
-| 节点 ID | 名称 | 默认工具 | 模式 | 产出 |
-|---------|------|----------|------|------|
-| `analyze_requirements` | 需求分析与澄清 | Cursor | **interactive** | `01-requirements.draft.md` → `01-requirements.md` |
-| `create_plan` | 制定计划 | Cursor | **interactive** | `docs/<req>/02-plan.md` |
-| `split_tasks` | 任务拆分 | Cursor | **interactive** | `docs/<req>/03-tasks.md` |
-| `implement_code` | 代码实现 | Cursor | **interactive** | 代码变更 + `04-implementation.md` |
-| `verify_tests` | 测试自验证 | Cursor | **interactive** | 按 `02-test-cases.md` 编写并执行单元/API/E2E 三层测试 + `05-test-report.md` |
-
-所有节点均在 **交互式 CLI** 中执行（含需求定稿），产出文件写入后 workflow **自动退出 CLI 并进入下一阶段**。
-
-不同节点可以使用不同的 AI 工具，在 `config/workflow.yaml` 的 `tool` 字段中独立配置。
+每个产出 md 末尾由程序写入 **Workflow 状态** 表（`node`、`status`、`next_node`、`pending_count` 等），供人工查看；续跑以 **文件是否存在 + approval 块 + router 规则** 为准，不仅看 `next_node`。
 
 ---
 
-## 5. 节点三要素设计
+## 5. 测试设计
 
-每个节点由以下三部分定义，全部外置在配置文件中：
+### 5.1 分工
+
+| 阶段 | 单元 `TC-UNIT-*` | API `TC-API-*` | E2E `TC-E2E-*` |
+|------|------------------|----------------|----------------|
+| `design_test_cases` | 写入 `02-test-cases.md` | 写入 `02-test-cases.md` | 不在此阶段设计 |
+| `implement_code` | 不写 | 不写 | 不涉及 |
+| `verify_tests` | 编写 + 运行 | 编写 + 运行 | 补充用例 + 执行（受 `e2e.enabled` 控制） |
+
+- **唯一依据**：`verify_tests` 严格按 `02-test-cases.md`（及本节点补充的 E2E 用例）执行
+- **框架**：必须使用业务工程已有测试栈（JUnit、MockMvc、`src/test`、Maven/Gradle），禁止自建独立测试工程
+- **E2E**：仅 `verify_tests` prompt 描述；使用 Playwright MCP（`config/mcp/servers.json`）；截图写入 `docs/<req>/e2e-screenshots/`
+
+### 5.2 开发阶段不涉及 E2E
+
+计划、任务、实现、review 等 prompt **不描述** E2E 执行细节；E2E 配置与 MCP 说明仅在 `prompts/05_verify_tests.md`。
+
+---
+
+## 6. 项目规则（project-rules）
+
+各节点可在 YAML 中配置：
+
+```yaml
+extend_rules:
+  - ddd-design-standard.md
+```
+
+`NodeRunner` 读取 `project-rules/` 下文件，拼入 prompt 的 `{{project_rules}}`。默认含 `ddd-design-standard.md`（DDD 四层、依赖方向、测试落地要求等）。
+
+---
+
+## 7. 产出文档链
+
+```text
+<app_root>/                          # 应用项目（默认 = dev-workflow/..）
+├── src/main/ ...                    # 业务代码
+├── pom.xml
+└── docs/<requirement-slug>/         # workflow 运行时产出（非 dev-workflow 内）
+    ├── 00-requirement.md
+    ├── draft/
+    ├── 01-requirements.md
+    ├── 02-plan.md
+    ├── 02-test-cases.md
+    ├── 02-plan-test-review.md
+    ├── 03-tasks.md
+    ├── 04-implementation.md
+    ├── 05-test-report.md
+    └── e2e-screenshots/
+```
+
+需求 slug：默认从 `--file` 文件名或 `--name` 推导（如 `examples/jwt-login-requirement.md` → `jwt-login`）。
+
+### 需求定稿结构化块
+
+`01-requirements.md` 头部需含：
+
+```yaml requirement_metadata
+requirement_type: new              # new | existing_change
+requirement_summary: "..."
+change_scope: "..."
+affected_modules: [...]
+compatibility_risk: low
+```
+
+```yaml requirement_approval
+status: pending    # pending | approved — 仅 approved 且内容就绪后进入 parallel_plan_and_tests
+```
+
+后续阶段类似：`test_cases_approval`、`review_plan_tests_approval`、`tasks_approval` 等。
+
+---
+
+## 8. 节点配置三要素
 
 ```yaml
 analyze_requirements:
   name: 需求分析与澄清
   tool: cursor
-  mode: interactive
+  mode: interactive          # interactive | headless
   prompt: prompts/01_requirements.md
   output: 01-requirements.md
+  extend_rules:
+    - ddd-design-standard.md
   inputs:
     - state: requirement
     - doc: 01-requirements.draft.md
     - doc: 01-requirements.md
 ```
 
-### 5.1 AI 工具（tool）
+### 8.1 AI 工具
 
-通过 `src/agents/registry.py` 注册，统一实现 `AITool` 接口：
+| 工具 | headless | interactive |
+|------|----------|-------------|
+| `cursor` | `agent -p --force --trust` | `agent --trust --force` |
+| `claude_code` | `claude --print` | `claude` |
+| `echo` | 回显 prompt（调试） | 跳过 |
 
-```python
-class AITool(ABC):
-    def run(self, prompt: str, cwd: str) -> AIToolResult:
-        """非交互（headless）执行"""
+注册：`src/agents/registry.py`。
 
-    def run_interactive(self, prompt: str, cwd: str) -> AIToolResult:
-        """交互模式：继承终端，用户直接与 AI CLI 对话"""
-```
+### 8.2 Prompt 变量
 
-| 工具 | 说明 | headless | interactive |
-|------|------|----------|-------------|
-| `cursor` | Cursor Agent | `agent -p --force --trust` | `agent --trust --force`（无 `-p`） |
-| `claude_code` | Claude Code | `claude --print` | `claude`（无 `--print`） |
-| `echo` | 调试模式 | 回显 prompt | 跳过交互会话 |
+- **state**：`{{requirement}}`、`{{project_root}}`、`{{requirement_type}}` …
+- **doc**：`{{doc_01-requirements.md}}` — 读取当前需求目录下对应文件
+- **project_rules**：`{{project_rules}}` — 来自 `extend_rules`
+- **verify 专用**：`{{e2e_enabled}}`、`{{e2e_base_url}}`
 
-新增工具只需：实现 `AITool` → 注册到 `_TOOLS` 字典 → 在 yaml 中引用。
+---
 
-### 5.2 Prompt 模板（prompt）
+## 9. 状态管理
 
-存放在 `prompts/` 目录，使用 `{{变量名}}` 占位符，由 `NodeRunner` 渲染：
+`src/state.py` 中 `DevWorkflowState` 主要字段：
 
-```markdown
-## 原始需求
-{{requirement}}
+| 字段 | 说明 |
+|------|------|
+| `requirement` / `docs_dir` / `requirement_slug` | 输入与产出路径 |
+| `resume_from_node` | 启动时由 router 设置，只用于 `route_next` |
+| `requirement_type` … `requirement_metadata` | 需求分析结构化结果 |
+| `requirement_approved` … `tasks_approved` | 各阶段用户确认 |
+| `clarification_*` | 澄清清单状态 |
+| `skip_clarification` | CLI `--skip-clarification` |
+| `node_outputs` / `completed_nodes` | 累积型 reducer |
+| `test_passed` | 由 `05-test-report.md` 解析 |
 
-## 标准需求文档
-{{doc_01-requirements.md}}
-```
+---
 
-支持的变量来源：
-
-- **state 变量** — 如 `{{requirement}}`、`{{project_root}}`
-- **doc 变量** — 如 `{{doc_01-requirements.md}}`，自动读取 `docs/` 中对应文件内容
-
-### 5.3 产出文档（output）
-
-每个节点执行完成后，将结果写入 `docs/<需求名>/` 目录（按需求隔离）：
+## 10. 目录结构
 
 ```text
-docs/
-└── jwt-login/                 # 需求目录（可由 --name 或文件名推导）
-    ├── 00-requirement.md          # 原始需求输入
-    ├── 01-requirements.draft.md   # 初稿 + 澄清清单（澄清回答在此更新）
-    ├── 01-requirements.md         # 需求分析定稿
-    ├── 02-plan.md
-    ├── 03-tasks.md
-    ├── 04-implementation.md
-    └── 05-test-report.md
-```
-
-产出文档示例：
-
-```markdown
-# 需求分析与澄清
-
-> 节点 ID: `analyze_requirements`
-> AI 工具: `cursor`
-> 生成时间: 2026-08-10T16:16:13
-> 执行状态: 成功
-
----
-
-（AI 工具返回的正文内容）
-```
-
-文档既是**人工可读的交付物**，也是**下游节点的输入源**，形成清晰的文档链。
-
-### 5.4 需求分析结构化摘要
-
-`analyze_requirements` 节点定稿产出（`01-requirements.md`）除 Markdown 正文外，必须在文档开头输出机器可读的 YAML 块：
-
-```yaml requirement_metadata
-requirement_type: new              # new | existing_change
-requirement_summary: "一句话摘要"
-judgment_basis: "判断依据"
-change_scope: "变更范围"
-affected_modules:
-  - "模块A"
-compatibility_risk: low            # low | medium | high
-needs_clarification: false
-open_questions_count: 0
-```
-
-定稿还需 `requirement_approval` 块，用户确认前为 `pending`，确认后为 `approved`；**仅 `approved` 时** workflow 才进入 `create_plan`：
-
-```yaml requirement_approval
-status: pending    # pending | approved
-confirmed_at: ""
-user_note: ""
-```
-
-节点执行后，`NodeRunner` 会解析该块并写入 LangGraph state：
-
-| State 字段 | 说明 |
-|------------|------|
-| `requirement_type` | `new` 新需求 / `existing_change` 老需求调整 |
-| `requirement_summary` | 需求摘要 |
-| `change_scope` | 变更范围 |
-| `affected_modules` | 受影响模块列表 |
-| `compatibility_risk` | 兼容性风险等级 |
-| `requirement_metadata` | 补充元数据（判断依据、待澄清等） |
-| `requirement_approved` | 用户是否已确认定稿（来自 `requirement_approval.status`） |
-
-下游节点（`create_plan`、`split_tasks`、`implement_code`）可通过 `inputs: state: requirement_type` 直接消费这些字段，无需再次解析 Markdown。
-
----
-
-## 6. 状态管理
-
-LangGraph 状态定义在 `src/state.py`：
-
-```python
-class DevWorkflowState(TypedDict, total=False):
-    requirement: str          # 原始需求输入
-    project_root: str         # 项目根目录
-    docs_dir: str             # 产出目录
-    current_node: str         # 当前执行的节点
-    completed_nodes: list     # 已完成的节点列表（自动合并）
-    node_outputs: dict        # 节点 ID → 产出文件路径（自动合并）
-    test_passed: bool         # 测试是否通过（仅记录，不触发重试）
-    last_error: str           # 最后一次错误信息
-```
-
-### 状态更新策略
-
-- `completed_nodes` 和 `node_outputs` 使用 LangGraph 的 `Annotated` reducer，支持跨节点累积
-- 其余字段由最新节点返回值覆盖
-- LangGraph 自动持久化 checkpoint，支持 `langgraph dev` 调试
-
----
-
-## 7. 数据流
-
-```
-用户输入 requirement
-        │
-        ▼
-┌───────────────────────────────┐
-│ 需求分析与澄清 (interactive)   │
-│  初稿清单上循环澄清 → 定稿       │
-│  产出: draft → 01-requirements.md │
-└───────────────┬───────────────┘
-                │ 读取定稿
-                ▼
-        ┌───────────────┐
-        │  制定计划      │ ──► 02-plan.md
-        │  (Cursor)     │
-        └───────────────┘
-                │
-                ▼
-        ... 依次传递 ...
-                │
-                ▼
-        ┌───────────────┐
-        │  测试自验证    │ ──► 05-test-report.md
-        │  (Cursor)     │      严格按 02-test-cases 执行
-        └───────────────┘      单元 + API + E2E；用项目既有测试栈
-                               test_passed: ?
-```
-
-**关键设计**：节点间不传递 AI 会话历史，只传递 Markdown 文件。这使得：
-
-- 每个 agent 的输入边界明确
-- 任何节点可独立重跑（只需上游 docs 存在）
-- 产出可直接提交 Git 做 Code Review
-
----
-
-## 8. 目录结构
-
-```
 dev-workflow/
-├── README.md                   # 本设计文档
-├── pyproject.toml              # 依赖与包配置
-├── langgraph.json              # LangGraph Dev 配置
-├── run.py                      # CLI 入口
+├── README.md
+├── start.sh                    # 推荐入口（venv + run.py）
+├── run.py
+├── pyproject.toml
+├── langgraph.json
 │
 ├── config/
-│   └── workflow.yaml           # 节点配置（工具 / prompt / 输入 / 输出）
+│   ├── workflow.yaml
+│   └── mcp/
+│       └── servers.json        # Playwright MCP（E2E）
 │
-├── project-rules/              # 项目规则（各节点 extend_rules 引用）
+├── project-rules/
 │   └── ddd-design-standard.md
 │
-├── prompts/                    # 各节点 prompt 模板
+├── prompts/
 │   ├── 01_requirements.md
 │   ├── 02_create_plan.md
+│   ├── 02_design_test_cases.md
+│   ├── 02_review_plan_and_tests.md
 │   ├── 03_split_tasks.md
 │   ├── 04_implement_code.md
 │   └── 05_verify_tests.md
 │
-├── examples/                   # 示例需求与澄清回答
+├── examples/                   # 示例需求
 │
-├── docs/                       # 按需求分子目录的节点产出（gitignore）
-│   └── <requirement-slug>/
-│       ├── 00-requirement.md
-│       ├── 01-requirements.draft.md
-│       ├── 01-requirements.md
-│       ├── 02-plan.md
-│       ├── 03-tasks.md
-│       ├── 04-implementation.md
-│       └── 05-test-report.md
+├── scripts/
+│   └── playwright-mcp.sh       # MCP 启动包装
 │
 └── src/
-    ├── state.py                # LangGraph 状态定义
-    ├── workflow.py             # 固定图编排
-    ├── graph.py                # LangGraph Dev 导出
-    ├── config_loader.py        # YAML 配置加载
-    │
-    ├── agents/                 # AI 工具适配层
-    │   ├── base.py             # AITool 抽象接口
-    │   ├── cursor_agent.py     # Cursor 适配器
-    │   ├── claude_code_agent.py# Claude Code 适配器
-    │   ├── echo_agent.py       # 调试适配器
-    │   └── registry.py         # 工具注册表
-    │
-    └── nodes/
-        └── node_runner.py      # 通用节点执行器
+    └── ...
 ```
+
+运行时产出在 **应用项目根**（非本目录）：
+
+```text
+<app_root>/docs/<requirement-slug>/   # 默认 ../docs/...
+```
+
+若曾使用 `dev-workflow/docs/`，请迁移到 `<app_root>/docs/` 后续跑。
 
 ---
 
-## 9. 快速开始
+## 11. 快速开始
 
-### 安装
+### 安装与启动
 
 ```bash
 cd dev-workflow
+./start.sh --help
+
+# 调试编排（echo，跳过澄清）
+./start.sh --tool echo --skip-clarification --file examples/jwt-login-requirement.md
+
+# 正式跑（Cursor + 指定需求名）
+./start.sh --name jwt-login --file examples/jwt-login-requirement.md
+```
+
+### 常用命令
+
+```bash
+# 仅安装依赖
 pip install -e .
-```
 
-### 调试模式（无需 AI 工具）
+# 直接调用 run.py
+python run.py --file examples/product-list-toc-requirement.md --name product-list-toc
 
-使用 `echo` 工具验证 workflow 编排是否正常：
-
-```bash
-python run.py "实现用户登录功能，支持 JWT 认证" --tool echo
-```
-
-执行后在 `docs/<需求名>/` 目录查看产出（含原始需求与各节点 Markdown）。
-
-### 使用 Cursor
-
-确保已安装 Cursor CLI，然后直接运行：
-
-```bash
-python run.py "实现用户登录功能，支持 JWT 认证"
-```
-
-### 使用 Claude Code
-
-确保已安装 Claude Code CLI，然后在 `config/workflow.yaml` 中将对应节点的 `tool` 设为 `claude_code`。
-
-### 从文件读取需求
-
-```bash
-python run.py --file ./my-requirement.md
-```
-
-### LangGraph Dev 调试
-
-```bash
+# LangGraph Dev
 pip install langgraph-cli langgraph-api
-langgraph dev
-# 图 ID: dev_workflow
+langgraph dev   # 图 ID: dev_workflow
 ```
+
+### MCP / E2E
+
+- Node 18+；`start.sh` 会尝试 nvm 切换版本
+- E2E 开启时自动同步 MCP 到 Cursor（除非 `--skip-mcp-setup` 或 `e2e.enabled: false`）
+- 页面 path 由实现代码/报告确认；host/端口来自 `workflow.e2e.base_url`
 
 ---
 
-## 10. 扩展指南
+## 12. 扩展指南
 
 ### 新增节点
 
-1. 在 `src/workflow.py` 添加节点函数、`add_node()` 和 `add_edge()`
-2. 在 `config/workflow.yaml` 的 `nodes` 下添加执行配置
-3. 在 `prompts/` 下创建 prompt 模板
+1. `src/workflow.py` — 节点函数、`add_node`、条件边
+2. `src/router.py` — `ROUTABLE_NODES`、checkpoint、gate（若需续跑）
+3. `src/phase_gate.py` — `PHASE_CONFIGS`（若有 approval）
+4. `config/workflow.yaml` + `prompts/` 新模板
 
 ### 新增 AI 工具
 
-1. 在 `src/agents/` 下新建文件，继承 `AITool` 并实现 `run()` 方法
-2. 在 `src/agents/registry.py` 的 `_TOOLS` 字典中注册
-3. 在 yaml 中将节点的 `tool` 设为新工具名
+实现 `AITool` → 注册 `src/agents/registry.py` → yaml 中 `tool:` 引用。
+
+### 新增项目规则
+
+在 `project-rules/` 添加 md，在对应节点 `extend_rules` 中引用。
 
 ### 调整流程
 
-在 `src/workflow.py` 中修改节点函数和 `add_edge()`，例如新增节点、调整顺序。
-
-### 自定义 prompt 变量
-
-在 prompt 模板中使用 `{{变量名}}`，在 yaml 的 `inputs` 中声明数据来源（`state` 或 `doc`），`NodeRunner` 会自动渲染。
+修改 `src/workflow.py` 中的边与门禁函数；YAML  alone 无法改拓扑。
 
 ---
 
-## 11. 依赖说明
+## 13. 依赖
 
-| 包 | 用途 | 是否必须 |
-|----|------|----------|
-| `langgraph` | Workflow 编排 | 是 |
-| `pyyaml` | 加载节点配置 | 是 |
-| `python-dotenv` | 读取环境变量 | 是 |
-| `typing-extensions` | TypedDict 兼容 | 是 |
-| `langgraph-cli` | LangGraph Dev 调试 | 否 |
+| 包 | 用途 |
+|----|------|
+| `langgraph` | Workflow 编排 |
+| `pyyaml` | 配置加载 |
+| `python-dotenv` | 环境变量 |
+| `typing-extensions` | TypedDict |
 
-核心设计刻意不依赖 LangChain / OpenAI SDK，AI 能力完全通过外部工具（Cursor CLI、Claude Code CLI）提供。
+不依赖 LangChain / OpenAI SDK；AI 能力由 Cursor CLI、Claude Code CLI 等外部工具提供。
 
 ---
 
-## 12. 附属服务：JWT 登录认证
+## 14. 与业务仓库的关系
 
-独立可运行的认证 HTTP 服务位于 [`auth-service/`](auth-service/)，与本仓库 LangGraph workflow（`src/`）解耦。启动、测试账号与联调说明见 [`auth-service/README.md`](auth-service/README.md)。
+| 路径 | 内容 |
+|------|------|
+| `dev-workflow/` | LangGraph 编排、YAML 配置、prompts、project-rules |
+| `<app_root>/`（默认上级目录） | Spring/Java 业务代码、`docs/<需求>/` 运行时产出 |
+
+`workflow.app_root` 可在 `config/workflow.yaml` 中改为绝对路径或其它相对路径。

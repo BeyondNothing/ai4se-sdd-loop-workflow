@@ -1,4 +1,4 @@
-"""按需求划分 docs 产出目录。"""
+"""路径解析：应用项目根、docs 产出目录。"""
 
 from __future__ import annotations
 
@@ -53,8 +53,23 @@ def make_requirement_slug(
     return f"req-{stamp}-{digest}"
 
 
+def resolve_app_root(workflow_root: Path, app_root: str | None = None) -> Path:
+    """
+    应用项目根目录（业务代码与 docs 产出所在仓库根）。
+
+    workflow_root: dev-workflow/ 目录
+    app_root: 配置值，相对 workflow_root 或绝对路径；默认 ``..``（上级目录）
+    """
+    workflow_root = workflow_root.resolve()
+    raw = (app_root or "..").strip() or ".."
+    path = Path(raw)
+    if not path.is_absolute():
+        path = workflow_root / path
+    return path.resolve()
+
+
 def resolve_requirement_docs_dir(
-    project_root: Path,
+    app_root: Path,
     base_docs_dir: str,
     requirement: str,
     *,
@@ -65,17 +80,19 @@ def resolve_requirement_docs_dir(
     """
     解析本次需求的产出目录。
 
-    返回 (相对 project_root 的 docs_dir, requirement_slug)。
-    默认结构: docs/<requirement-slug>/
+    返回 (相对 app_root 的路径, requirement_slug)。
+    默认结构: <app_root>/docs/<requirement-slug>/
     """
+    app_root = app_root.resolve()
+
     if docs_dir:
         path = Path(docs_dir)
         if not path.is_absolute():
-            path = project_root / path
+            path = app_root / path
         path.mkdir(parents=True, exist_ok=True)
         (path / "draft").mkdir(parents=True, exist_ok=True)
         try:
-            relative = str(path.relative_to(project_root))
+            relative = str(path.relative_to(app_root))
         except ValueError:
             relative = str(path)
         slug = path.name
@@ -85,15 +102,24 @@ def resolve_requirement_docs_dir(
         requirement, name=name, source_file=source_file
     )
     base = Path(base_docs_dir)
-    if not base.is_absolute():
-        target = project_root / base / slug
-        relative = str(base / slug)
-    else:
+    if base.is_absolute():
         target = base / slug
         relative = str(target)
+    else:
+        target = app_root / base / slug
+        relative = str(base / slug)
     target.mkdir(parents=True, exist_ok=True)
     (target / "draft").mkdir(parents=True, exist_ok=True)
     return relative, slug
+
+
+def resolve_docs_path(app_root: Path, docs_dir: str) -> Path:
+    """将 state/config 中的 docs_dir 解析为绝对路径。"""
+    app_root = app_root.resolve()
+    path = Path(docs_dir)
+    if path.is_absolute():
+        return path
+    return (app_root / path).resolve()
 
 
 def save_original_requirement(docs_dir: Path, requirement: str) -> Path:

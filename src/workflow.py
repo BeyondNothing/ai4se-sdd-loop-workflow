@@ -18,7 +18,12 @@ from .phase_gate import (
     resolve_draft_path,
     review_plan_tests_complete,
 )
-from .requirement_dir import resolve_requirement_docs_dir, save_original_requirement
+from .requirement_dir import (
+    resolve_app_root,
+    resolve_docs_path,
+    resolve_requirement_docs_dir,
+    save_original_requirement,
+)
 from .router import determine_start_node, is_workflow_complete, restore_state_from_docs
 from .state import DevWorkflowState
 
@@ -70,9 +75,10 @@ class DevWorkflow:
             )
 
         logger.info("跳过澄清且无 pending，已将初稿提升为定稿: %s", final_path)
+        app_root = self._resolve_app_root(state)
         updates: DevWorkflowState = {
             "node_outputs": {
-                "analyze_requirements": str(final_path.relative_to(self.project_root)),
+                "analyze_requirements": str(final_path.relative_to(app_root)),
             },
             "clarification_resolved": True,
             "clarification_pending_count": 0,
@@ -174,12 +180,14 @@ class DevWorkflow:
             return "implement_code"
         return END
 
+    def _resolve_app_root(self, state: DevWorkflowState | None = None) -> Path:
+        if state and state.get("app_root"):
+            return resolve_app_root(self.project_root, state["app_root"])
+        return resolve_app_root(self.project_root, self.workflow_config.app_root)
+
     def _resolve_docs_path(self, state: DevWorkflowState) -> Path:
         docs_dir = state.get("docs_dir") or self.workflow_config.docs_dir
-        path = Path(docs_dir)
-        if not path.is_absolute():
-            path = self.project_root / path
-        return path
+        return resolve_docs_path(self._resolve_app_root(state), docs_dir)
 
     def _build_graph(self):
         workflow = StateGraph(DevWorkflowState)
@@ -258,17 +266,16 @@ class DevWorkflow:
         skip_clarification: bool = False,
         fresh: bool = False,
     ) -> DevWorkflowState:
+        app_root = self._resolve_app_root()
         resolved_docs_dir, requirement_slug = resolve_requirement_docs_dir(
-            self.project_root,
+            app_root,
             self.workflow_config.docs_dir,
             requirement,
             docs_dir=docs_dir,
             name=name,
             source_file=source_file,
         )
-        docs_path = Path(resolved_docs_dir)
-        if not docs_path.is_absolute():
-            docs_path = self.project_root / docs_path
+        docs_path = resolve_docs_path(app_root, resolved_docs_dir)
 
         if fresh and docs_path.exists():
             for path in docs_path.glob("*.md"):
@@ -285,6 +292,7 @@ class DevWorkflow:
             logger.info("Workflow 已完成（05-test-report.md status=completed）")
             done_state: DevWorkflowState = {
                 "requirement": requirement,
+                "app_root": str(app_root),
                 "docs_dir": resolved_docs_dir,
                 "requirement_slug": requirement_slug,
                 "clarification_resolved": True,
@@ -301,12 +309,13 @@ class DevWorkflow:
         initial: DevWorkflowState = {
             "requirement": requirement,
             "project_root": str(self.project_root),
+            "app_root": str(app_root),
             "docs_dir": resolved_docs_dir,
             "requirement_slug": requirement_slug,
             "resume_from_node": start_node,
             "node_outputs": {
                 "original_requirement": str(
-                    original_path.relative_to(self.project_root)
+                    original_path.relative_to(app_root)
                 ),
             },
             "completed_nodes": [],

@@ -1,4 +1,3 @@
-!docs/**/.gitkeep
 .dev-workflow/
 .venv/
 .venv-test/

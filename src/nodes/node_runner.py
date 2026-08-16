@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..agents.registry import get_ai_tool
 from ..config_loader import NodeConfig, WorkflowConfig
+from ..requirement_dir import resolve_app_root, resolve_docs_path
 from ..project_rules_loader import build_project_rules_prompt
 from ..parsers.clarification_parser import parse_clarification_checklist
 from ..parsers.approval_parser import (
@@ -42,6 +43,7 @@ class NodeRunner:
     def __init__(self, workflow_config: WorkflowConfig, project_root: Path):
         self.workflow_config = workflow_config
         self.project_root = project_root
+        self.app_root = resolve_app_root(project_root, workflow_config.app_root)
         self.prompts_dir = project_root / "prompts"
 
     def run_node(self, node_id: str, state: DevWorkflowState) -> DevWorkflowState:
@@ -89,7 +91,16 @@ class NodeRunner:
 
         updates: DevWorkflowState = {
             "current_node": node_id,
-            "node_outputs": {node_id: str(output_path.relative_to(self.project_root))},
+            "node_outputs": {
+                node_id: str(
+                    output_path.relative_to(
+                        resolve_app_root(
+                            self.project_root,
+                            state.get("app_root") or self.workflow_config.app_root,
+                        )
+                    )
+                )
+            },
             "completed_nodes": [node_id],
         }
         updates.update(self._parse_node_outputs(node_id, content, docs_dir))
@@ -404,15 +415,16 @@ class NodeRunner:
 
     def _resolve_docs_dir(self, state: DevWorkflowState) -> Path:
         docs_dir = state.get("docs_dir") or self.workflow_config.docs_dir
-        path = Path(docs_dir)
-        if not path.is_absolute():
-            path = self.project_root / path
-        return path
+        app_root = resolve_app_root(
+            self.project_root,
+            state.get("app_root") or self.workflow_config.app_root,
+        )
+        return resolve_docs_path(app_root, docs_dir)
 
     def _agent_cwd(self, node_id: str) -> Path:
-        """实现/测试节点在上级目录执行，便于访问业务工程；其余在 dev-workflow。"""
+        """实现/测试节点在应用项目根执行；其余在 dev-workflow。"""
         if node_id in _CODE_WORK_NODES:
-            return self.project_root.parent
+            return self.app_root
         return self.project_root
 
     def _load_prompt(self, prompt_file: str) -> str:
@@ -429,6 +441,12 @@ class NodeRunner:
         context: dict[str, str] = {
             "requirement": state.get("requirement", ""),
             "project_root": str(self.project_root),
+            "app_root": str(
+                resolve_app_root(
+                    self.project_root,
+                    state.get("app_root") or self.workflow_config.app_root,
+                )
+            ),
             "docs_dir": str(docs_dir),
             "output_path": str(docs_dir / node_cfg.output_file),
             "node_output_path": str(docs_dir / node_cfg.output_file),

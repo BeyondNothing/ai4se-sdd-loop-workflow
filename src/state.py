@@ -17,6 +17,7 @@ class DevWorkflowState(TypedDict, total=False):
 
     requirement: str
     project_root: str
+    app_root: str
     docs_dir: str
     requirement_slug: str
     current_node: str

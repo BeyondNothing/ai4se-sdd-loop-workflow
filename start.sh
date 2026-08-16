@@ -17,9 +17,9 @@ usage() {
 
 选项:
   -f, --file PATH     从文件读取需求（推荐）
-  -n, --name NAME     需求目录名，产出落在 docs/<NAME>/
+  -n, --name NAME     需求目录名，产出落在 <应用根>/docs/<NAME>/
   -t, --tool TOOL     覆盖 AI 工具: cursor | claude_code | echo
-  -d, --docs-dir DIR  覆盖完整产出目录（默认 docs/<需求名>/）
+  -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
   --fresh               清除已有产出（保留 00-requirement.md）后重来
   --skip-mcp-setup      跳过 Playwright MCP 自动配置

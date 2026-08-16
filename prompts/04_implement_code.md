@@ -21,9 +21,9 @@
 
 ## 工程结构（动手前先了解）
 
-本 workflow 运行在 `{{project_root}}`（`dev-workflow/`），**业务代码通常不在此目录**。编码前请**先整体查看仓库目录结构**（如上级目录、`apps/`、`modules/`、根 `pom.xml` / `build.gradle` 等），弄清既有工程 layout 后再创建或修改代码。
+本 workflow 编排引擎位于 `{{project_root}}`（`dev-workflow/`）。**业务代码与 docs 产出**在应用项目根 `{{app_root}}`。编码前请查看该目录结构（如 `src/main`、`pom.xml` 等），再创建或修改代码。
 
-- **不要**把业务代码写到 `dev-workflow/` 内
+- **不要**把业务代码或 docs 写到 `dev-workflow/` 内
 - **遵循**仓库已有的模块/服务目录约定，不要臆造路径
 - 若从目录结构仍无法确定落点，在会话中向用户确认后再动手
 

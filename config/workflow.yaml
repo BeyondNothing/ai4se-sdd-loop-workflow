@@ -1,5 +1,6 @@
 workflow:
   docs_dir: docs
+  app_root: ..          # 应用项目根（相对 dev-workflow/），docs 产出写在此目录下
   project_rules_dir: project-rules
   e2e:
     enabled: false   # false 时跳过浏览器 E2E（verify_tests 仍执行单元/API 测试）
