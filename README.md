@@ -42,8 +42,9 @@ LangGraph 负责编排（状态管理、节点调度、续跑路由）；每个�
 | 层级 | 位置 | 内容 |
 |------|------|------|
 | 图编排 | `src/workflow.py` | 节点、边、并行 plan/test、门禁路由 |
-| 节点执行 | `config/workflow.yaml` | tool、mode、prompt、inputs、extend_rules |
-| 扩展规则 | `<app_root>/ai-rules/` | 按节点 `extend_rules` 注入 prompt |
+| 节点执行 | `config/workflow.yaml` | tool、mode、prompt、inputs |
+| 扩展规则 | `config/ai-rules.yaml` | 各节点 `extend_rules`（本地，不提交） |
+| 规则内容 | `<app_root>/ai-rules/` | 规则 markdown 文件 |
 | 续跑逻辑 | `src/router.py` | 读 docs 决定启动节点 |
 
 ### 2.4 Workflow 级配置
@@ -52,7 +53,6 @@ LangGraph 负责编排（状态管理、节点调度、续跑路由）；每个�
 workflow:
   app_root: ..              # 应用项目根（相对 dev-workflow/）
   docs_dir: docs            # 产出: <app_root>/docs/<需求名>/
-  ai_rules_dir: ai-rules     # 相对 app_root
   e2e:
     enabled: true          # false 时跳过浏览器 E2E
     base_url: http://localhost:8080
@@ -62,9 +62,10 @@ workflow:
 |--------|------|------|
 | `app_root` | 应用项目根（业务代码 + docs 产出） | `..` |
 | `docs_dir` | 产出相对 app_root 的子目录 | `docs` |
-| `ai_rules_dir` | 扩展规则目录（相对 app_root） | `ai-rules` |
 | `e2e.enabled` | 是否执行浏览器 E2E（Playwright MCP） | `true` |
 | `e2e.base_url` | E2E 服务基址（host/端口） | `http://localhost:8080` |
+
+扩展规则（各项目不同）见 `config/ai-rules.yaml`（从 `ai-rules.example.yaml` 复制，**不提交仓库**）。
 
 `e2e.enabled: false` 时：`verify_tests` 仍执行单元/API 测试；`TC-E2E-*` 在报告中标 **skip**（不算失败）；启动时跳过 Playwright MCP 同步。
 
@@ -157,11 +158,11 @@ YAML 中还定义 `create_plan`、`design_test_cases` 两个 headless 子节点�
 | `--skip-mcp-setup` | 跳过 Playwright MCP 配置 |
 
 ```bash
-# 推荐入口
-./start.sh --name product-list-toc --file examples/product-list-toc-requirement.md
+# 首次运行（需求文件在应用根 docs/requirements/）
+./start.sh --name product-list-toc --file ../docs/requirements/product-list-toc-requirement.md
 
-# 续跑（不要加 --fresh）
-./start.sh --skip-clarification --name product-list-toc --file examples/product-list-toc-requirement.md
+# 续跑（不要加 --fresh）；已有 docs/<name>/ 时可只传 --name
+./start.sh --skip-clarification --name product-list-toc
 ```
 
 每个产出 md 末尾由程序写入 **Workflow 状态** 表（`node`、`status`、`next_node`、`pending_count` 等），供人工查看；续跑以 **文件是否存在 + approval 块 + router 规则** 为准，不仅看 `next_node`。
@@ -190,14 +191,36 @@ YAML 中还定义 `create_plan`、`design_test_cases` 两个 headless 子节点�
 
 ## 6. 扩展规则（ai-rules）
 
-各节点可在 YAML 中配置：
+### 6.1 配置（本地，不提交）
 
-```yaml
-extend_rules:
-  - ddd-design-standard.md
+与 `workflow.yaml` 同级，复制示例后按项目修改：
+
+```bash
+cp config/ai-rules.example.yaml config/ai-rules.yaml
 ```
 
-`NodeRunner` 从 `<app_root>/<ai_rules_dir>/`（默认 `ai-rules/`）读取文件，拼入 prompt 的 `{{ai_rules}}`。规则文件归属应用项目，不放在 `dev-workflow/` 内。
+```yaml
+# config/ai-rules.yaml
+ai_rules_dir: ai-rules   # 相对 app_root
+
+nodes:
+  analyze_requirements:
+    - ddd-design-standard.md
+  implement_code:
+    - ddd-design-standard.md
+  # ... 其他节点 node_id 与 workflow.yaml 一致
+```
+
+| 字段 | 说明 |
+|------|------|
+| `ai_rules_dir` | 规则 markdown 目录（相对 `app_root`） |
+| `nodes.<node_id>` | 该节点注入的规则文件名列表 |
+
+未配置 `ai-rules.yaml` 时，各节点 `{{ai_rules}}` 为空提示，workflow 仍可运行。
+
+### 6.2 规则文件
+
+`NodeRunner` 从 `<app_root>/<ai_rules_dir>/` 读取上述文件，拼入 prompt 的 `{{ai_rules}}`。规则内容归属应用项目，不放在 `dev-workflow/` 内。
 
 ---
 
@@ -207,20 +230,24 @@ extend_rules:
 <app_root>/                          # 应用项目（默认 = dev-workflow/..）
 ├── src/main/ ...                    # 业务代码
 ├── pom.xml
-└── docs/<requirement-slug>/         # workflow 运行时产出（非 dev-workflow 内）
-    ├── 00-requirement.md
-    ├── draft/
-    ├── 01-requirements.md
-    ├── 02-plan.md
-    ├── 02-test-cases.md
-    ├── 02-plan-test-review.md
-    ├── 03-tasks.md
-    ├── 04-implementation.md
-    ├── 05-test-report.md
-    └── e2e-screenshots/
+├── docs/
+│   ├── requirements/                # 原始需求输入（示例与自定义）
+│   │   ├── jwt-login-requirement.md
+│   │   └── product-list-toc-requirement.md
+│   └── <requirement-slug>/          # workflow 运行时产出
+│       ├── 00-requirement.md
+│       ├── draft/
+│       ├── 01-requirements.md
+│       ├── 02-plan.md
+│       ├── 02-test-cases.md
+│       ├── 02-plan-test-review.md
+│       ├── 03-tasks.md
+│       ├── 04-implementation.md
+│       ├── 05-test-report.md
+│       └── e2e-screenshots/
 ```
 
-需求 slug：默认从 `--file` 文件名或 `--name` 推导（如 `examples/jwt-login-requirement.md` → `jwt-login`）。
+需求 slug：默认从 `--file` 文件名或 `--name` 推导（如 `docs/requirements/jwt-login-requirement.md` → `jwt-login`）。
 
 ### 需求定稿结构化块
 
@@ -251,13 +278,13 @@ analyze_requirements:
   mode: interactive          # interactive | headless
   prompt: prompts/01_requirements.md
   output: 01-requirements.md
-  extend_rules:
-    - ddd-design-standard.md
   inputs:
     - state: requirement
     - doc: 01-requirements.draft.md
     - doc: 01-requirements.md
 ```
+
+节点 `extend_rules` 在 `config/ai-rules.yaml` 中配置，不在 `workflow.yaml`。
 
 ### 8.1 AI 工具
 
@@ -273,7 +300,7 @@ analyze_requirements:
 
 - **state**：`{{requirement}}`、`{{project_root}}`、`{{requirement_type}}` …
 - **doc**：`{{doc_01-requirements.md}}` — 读取当前需求目录下对应文件
-- **ai_rules**：`{{ai_rules}}` — 来自 `extend_rules` + `workflow.ai_rules_dir`
+- **ai_rules**：`{{ai_rules}}` — 来自 `config/ai-rules.yaml` + `<app_root>/ai-rules/`
 - **verify 专用**：`{{e2e_enabled}}`、`{{e2e_base_url}}`
 
 ---
@@ -307,13 +334,13 @@ dev-workflow/
 │
 ├── config/
 │   ├── workflow.yaml
+│   ├── ai-rules.example.yaml   # 扩展规则示例（复制为 ai-rules.yaml）
 │   └── mcp/
 │       └── servers.json        # Playwright MCP（E2E）
 │
 ├── prompts/
 │   └── ...
 │
-├── examples/
 └── src/
 ```
 
@@ -322,7 +349,9 @@ dev-workflow/
 ```text
 <app_root>/
 ├── ai-rules/                   # 扩展规则（如 ddd-design-standard.md）
-├── docs/<requirement-slug>/    # workflow 运行时产出
+├── docs/
+│   ├── requirements/           # 原始需求输入
+│   └── <requirement-slug>/     # workflow 运行时产出
 └── src/main/ ...
 ```
 
@@ -336,13 +365,14 @@ dev-workflow/
 
 ```bash
 cd dev-workflow
+cp config/ai-rules.example.yaml config/ai-rules.yaml   # 首次使用
 ./start.sh --help
 
 # 调试编排（echo，跳过澄清）
-./start.sh --tool echo --skip-clarification --file examples/jwt-login-requirement.md
+./start.sh --tool echo --skip-clarification --file ../docs/requirements/jwt-login-requirement.md
 
 # 正式跑（Cursor + 指定需求名）
-./start.sh --name jwt-login --file examples/jwt-login-requirement.md
+./start.sh --name jwt-login --file ../docs/requirements/jwt-login-requirement.md
 ```
 
 ### 常用命令
@@ -352,7 +382,7 @@ cd dev-workflow
 pip install -e .
 
 # 直接调用 run.py
-python run.py --file examples/product-list-toc-requirement.md --name product-list-toc
+python run.py --file ../docs/requirements/product-list-toc-requirement.md --name product-list-toc
 
 # LangGraph Dev
 pip install langgraph-cli langgraph-api
@@ -382,7 +412,7 @@ langgraph dev   # 图 ID: dev_workflow
 
 ### 新增项目规则
 
-在 `<app_root>/ai-rules/` 添加 md，在对应节点 `extend_rules` 中引用。
+在 `<app_root>/ai-rules/` 添加 md，在 `config/ai-rules.yaml` 对应节点的列表中引用。
 
 ### 调整流程
 

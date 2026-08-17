@@ -1,7 +1,6 @@
 workflow:
   docs_dir: docs
   app_root: ..          # 应用项目根（相对 dev-workflow/）
-  ai_rules_dir: ai-rules # 扩展规则目录（相对 app_root）
   e2e:
     enabled: false   # false 时跳过浏览器 E2E（verify_tests 仍执行单元/API 测试）
     base_url: http://localhost:8080
@@ -13,8 +12,6 @@ nodes:
     mode: interactive
     prompt: prompts/01_requirements.md
     output: 01-requirements.md
-    extend_rules:
-      - ddd-design-standard.md
     inputs:
       - state: requirement
       - doc: 01-requirements.draft.md
@@ -26,8 +23,6 @@ nodes:
     mode: headless
     prompt: prompts/02_create_plan.md
     output: 02-plan.md
-    extend_rules:
-      - ddd-design-standard.md
     inputs:
       - doc: 01-requirements.md
       - state: requirement_type
@@ -42,8 +37,6 @@ nodes:
     mode: headless
     prompt: prompts/02_design_test_cases.md
     output: 02-test-cases.md
-    extend_rules:
-      - ddd-design-standard.md
     inputs:
       - doc: 01-requirements.md
       - state: requirement_type
@@ -57,8 +50,6 @@ nodes:
     mode: interactive
     prompt: prompts/02_review_plan_and_tests.md
     output: 02-plan-test-review.md
-    extend_rules:
-      - ddd-design-standard.md
     inputs:
       - doc: 01-requirements.md
       - doc: 02-plan.md
@@ -77,8 +68,6 @@ nodes:
     mode: interactive
     prompt: prompts/03_split_tasks.md
     output: 03-tasks.md
-    extend_rules:
-      - ddd-design-standard.md
     inputs:
       - doc: 01-requirements.md
       - doc: 02-plan.md
@@ -96,8 +85,6 @@ nodes:
     mode: interactive
     prompt: prompts/04_implement_code.md
     output: 04-implementation.md
-    extend_rules:
-      - ddd-design-standard.md
     inputs:
       - doc: 01-requirements.md
       - doc: 02-plan.md
@@ -113,8 +100,6 @@ nodes:
     mode: interactive
     prompt: prompts/05_verify_tests.md
     output: 05-test-report.md
-    extend_rules:
-      - ddd-design-standard.md
     inputs:
       - doc: 02-test-cases.md
       - doc: 03-tasks.md

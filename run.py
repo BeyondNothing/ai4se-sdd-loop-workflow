@@ -14,6 +14,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.workflow import DevWorkflow  # noqa: E402
 from src.mcp import ensure_mcp_for_agents  # noqa: E402
 from src.config_loader import load_workflow_config  # noqa: E402
+from src.requirement_dir import resolve_app_root, resolve_docs_path  # noqa: E402
 
 
 def main():
@@ -72,18 +73,46 @@ def main():
         help="跳过 Playwright MCP 自动配置（调试用）",
     )
     args = parser.parse_args()
+    wf_cfg = load_workflow_config(args.config)
+    app_root = resolve_app_root(PROJECT_ROOT, wf_cfg.app_root)
 
     source_file = None
+    requirement = None
+
     if args.file:
         source_file = args.file.resolve()
         requirement = source_file.read_text(encoding="utf-8")
     elif args.requirement:
         requirement = args.requirement
-    else:
-        parser.error("请提供 requirement 参数或 --file")
+    elif args.name:
+        existing = resolve_docs_path(
+            app_root, f"{wf_cfg.docs_dir.strip('/')}/{args.name}"
+        ) / "00-requirement.md"
+        if existing.is_file():
+            source_file = existing
+            requirement = existing.read_text(encoding="utf-8")
+            logging.info("从已有产出读取需求: %s", existing)
+
+    if requirement is None:
+        if args.name:
+            named_sample = (
+                app_root / wf_cfg.docs_dir / "requirements" / f"{args.name}-requirement.md"
+            )
+            if named_sample.is_file():
+                source_file = named_sample
+                requirement = named_sample.read_text(encoding="utf-8")
+                logging.info("从 docs/requirements 读取需求: %s", named_sample)
+
+    if requirement is None:
+        default_sample = app_root / wf_cfg.docs_dir / "requirements" / "jwt-login-requirement.md"
+        if default_sample.is_file():
+            source_file = default_sample
+            requirement = default_sample.read_text(encoding="utf-8")
+            logging.info("未传需求，使用默认: %s", default_sample)
+        else:
+            parser.error("请提供 requirement、--file，或 --name（且 docs/<name>/00-requirement.md 已存在）")
 
     if not args.skip_mcp_setup:
-        wf_cfg = load_workflow_config(args.config)
         if wf_cfg.e2e_enabled:
             mcp_result = ensure_mcp_for_agents(PROJECT_ROOT)
             logging.info(

@@ -28,14 +28,14 @@ usage() {
 
 示例:
   # 调试：不调真实 AI，只跑通编排
-  # 产出: docs/jwt-login/{00-requirement,01-requirements,...}.md
-  ./start.sh --tool echo --skip-clarification --file examples/jwt-login-requirement.md
+  # 产出在 <应用根>/docs/<name>/（非 dev-workflow 内）
+  ./start.sh --tool echo --skip-clarification --file ../docs/requirements/jwt-login-requirement.md --name jwt-login
 
   # 指定需求目录名
-  ./start.sh --name jwt-login --file examples/jwt-login-requirement.md
+  ./start.sh --name jwt-login --file ../docs/requirements/jwt-login-requirement.md
 
-  # 使用 Cursor Agent（默认配置多为 cursor）
-  ./start.sh --file examples/jwt-login-requirement.md
+  # 续跑：已有 docs/jwt-login/00-requirement.md 时可只传 --name
+  ./start.sh --name jwt-login
 
   # 直接传需求文本
   ./start.sh --tool echo "实现用户登录功能，支持 JWT 认证"
@@ -209,7 +209,7 @@ fi
 
 # ---------- default requirement ----------
 if [[ -z "$REQ_FILE" && ${#REQ_TEXT[@]} -eq 0 ]]; then
-  DEFAULT_REQ="examples/jwt-login-requirement.md"
+  DEFAULT_REQ="../docs/requirements/jwt-login-requirement.md"
   if [[ -f "$DEFAULT_REQ" ]]; then
     echo "==> 未传需求，使用默认: $DEFAULT_REQ"
     REQ_FILE="$DEFAULT_REQ"

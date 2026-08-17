@@ -1,10 +1,15 @@
 """加载 workflow 与节点配置。"""
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
+
+AI_RULES_CONFIG_FILENAME = "ai-rules.yaml"
 
 
 @dataclass
@@ -58,13 +63,39 @@ def _parse_input(raw: dict[str, str]) -> NodeInput:
     raise ValueError(f"Invalid node input config: {raw}")
 
 
-def _parse_extend_rules(cfg: dict[str, Any]) -> list[str]:
-    raw = cfg.get("extend_rules")
-    if raw is None:
-        raw = cfg.get("extend-rules")
+def _parse_rule_list(raw: Any) -> list[str]:
     if not isinstance(raw, list):
         return []
     return [str(item).strip() for item in raw if str(item).strip()]
+
+
+def load_ai_rules_config(workflow_config_path: Path) -> tuple[str, dict[str, list[str]]]:
+    """加载与 workflow.yaml 同级的 ai-rules.yaml（本地配置，不提交仓库）。"""
+    path = workflow_config_path.parent / AI_RULES_CONFIG_FILENAME
+    if not path.is_file():
+        example = workflow_config_path.parent / "ai-rules.example.yaml"
+        hint = f"（可参考 {example.name}）" if example.is_file() else ""
+        logger.warning(
+            "未找到 %s %s，各节点将不注入扩展规则",
+            path,
+            hint,
+        )
+        return "ai-rules", {}
+
+    with open(path, encoding="utf-8") as f:
+        data: dict[str, Any] = yaml.safe_load(f) or {}
+
+    ai_rules_dir = str(data.get("ai_rules_dir") or "ai-rules").strip() or "ai-rules"
+
+    nodes_raw = data.get("nodes") or {}
+    node_rules: dict[str, list[str]] = {}
+    if isinstance(nodes_raw, dict):
+        for node_id, raw in nodes_raw.items():
+            rules = _parse_rule_list(raw)
+            if rules:
+                node_rules[str(node_id)] = rules
+
+    return ai_rules_dir, node_rules
 
 
 def load_workflow_config(config_path: Path) -> WorkflowConfig:
@@ -73,6 +104,7 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
 
     workflow = data["workflow"]
     nodes_raw: dict[str, Any] = data["nodes"]
+    ai_rules_dir, node_extend_rules = load_ai_rules_config(config_path)
 
     e2e = workflow.get("e2e") or {}
     if not isinstance(e2e, dict):
@@ -80,11 +112,6 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
     e2e_base_url = str(e2e.get("base_url") or "http://localhost:8080").strip().rstrip("/")
     e2e_enabled = _parse_bool(e2e.get("enabled"), default=True)
     app_root = str(workflow.get("app_root") or "..").strip() or ".."
-    ai_rules_dir = str(
-        workflow.get("ai_rules_dir")
-        or workflow.get("project_rules_dir")
-        or "ai-rules"
-    ).strip() or "ai-rules"
 
     nodes: dict[str, NodeConfig] = {}
     for node_id, cfg in nodes_raw.items():
@@ -96,7 +123,7 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
             output_file=cfg["output"],
             mode=cfg.get("mode", "headless"),
             inputs=[_parse_input(i) for i in cfg.get("inputs", [])],
-            extend_rules=_parse_extend_rules(cfg),
+            extend_rules=node_extend_rules.get(node_id, []),
         )
 
     return WorkflowConfig(
