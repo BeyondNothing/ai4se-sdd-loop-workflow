@@ -98,10 +98,11 @@ E2E 开始前按以下顺序自检，**不得**跳过：
 
 ## 执行要求
 
+0. **Oh My Pi**：若启动消息指向 `.dev-workflow/last_prompt.txt`，须先用 **read** 打开该文件再执行；**不要**在 read 之前因「工具列表暂无 playwright」就判定 blocked——应先 `/mcp list`
 1. 逐条对照 `02-test-cases.md` 执行 `TC-UNIT-*`、`TC-API-*`
 2. **单元测试**：新增/补全测试类，运行项目测试命令，记录用例编号 ↔ 测试方法 ↔ 结果
 3. **API 测试**：断言与用例预期一致（状态码、关键字段、错误场景）
-4. **E2E**：按上文配置开关执行或 skip；MCP 不可用时 **blocked 并询问用户**，禁止 CLI 回退
+4. **E2E**：按上文配置开关执行或 skip；MCP 不可用时 **blocked 并询问用户**，禁止 CLI/eval 回退
 5. 输出 **测试报告**，包含：用例追溯表、单元/API/E2E 各小节、执行命令、问题与建议、`test_passed: true/false`
 
 将测试报告写入 `{{output_path}}`。

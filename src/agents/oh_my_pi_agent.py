@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 _EXTRA_BIN_DIRS = (Path.home() / ".local" / "bin",)
 _WORKING_LINE = re.compile(r"^Working\.+$")
 _MIN_NODE_MAJOR = 18
+# 过长 argv 会导致 omp 启动异常，MCP 无法加载（verify_tests prompt 常 >60KB）
+_LAUNCH_PROMPT_MAX_CHARS = 8_000
 
 
 class OhMyPiTool(AITool):
@@ -38,9 +40,10 @@ class OhMyPiTool(AITool):
                 message=f"Oh My Pi CLI (omp) 不可用，prompt 已保存至 {prompt_file}",
             )
 
+        launch_prompt = self._launch_prompt(prompt, prompt_file, interactive=False)
         cmd = self._build_cmd(
             binary,
-            prompt,
+            launch_prompt,
             headless=True,
             cwd=cwd,
         )
@@ -97,13 +100,14 @@ class OhMyPiTool(AITool):
                 message=f"Oh My Pi CLI (omp) 不可用，prompt 已保存至 {prompt_file}",
             )
 
+        launch_prompt = self._launch_prompt(prompt, prompt_file, interactive=True)
         cmd = self._build_cmd(
             binary,
-            prompt,
+            launch_prompt,
             headless=False,
             cwd=cwd,
         )
-        self._print_interactive_banner(cwd, cmd)
+        self._print_interactive_banner(cwd, cmd, prompt_file)
         try:
             logger.info("交互调用 Oh My Pi CLI: %s", binary)
             return run_interactive_subprocess(
@@ -216,7 +220,35 @@ class OhMyPiTool(AITool):
         return "playwright_browser_" in output.lower()
 
     @classmethod
-    def _print_interactive_banner(cls, cwd: str, cmd: list[str]) -> None:
+    def _launch_prompt(
+        cls, prompt: str, prompt_file: Path, *, interactive: bool
+    ) -> str:
+        if len(prompt) <= _LAUNCH_PROMPT_MAX_CHARS:
+            return prompt
+        path = prompt_file.resolve()
+        logger.info(
+            "Oh My Pi 启动 prompt 过长 (%d chars)，改为 read 文件: %s",
+            len(prompt),
+            path,
+        )
+        header = (
+            "dev-workflow 节点任务全文已写入以下文件，请用 **read** 打开并逐条执行"
+            "（不要跳过文件中的约束）：\n"
+            f"{path}\n\n"
+            "第一步：执行 `/mcp list`。"
+            "若看到 `playwright | connected`，Playwright MCP 可用，可继续 E2E。"
+            "工具名前缀 `mcp_pi-agent_mcp__playwright_browser_`；"
+            "`ListMcpResources` 为空是正常的。\n"
+            "禁止用 eval/CLI 替代 Playwright MCP 做 E2E。"
+        )
+        if interactive:
+            return header
+        return f"{header}\n完成后按文件中的产出路径写入测试报告。"
+
+    @classmethod
+    def _print_interactive_banner(
+        cls, cwd: str, cmd: list[str], prompt_file: Path
+    ) -> None:
         project_root = cls._resolve_omp_project_root(cwd)
         mcp_file = (
             project_root / ".omp" / "mcp.json" if project_root is not None else None
@@ -229,6 +261,7 @@ class OhMyPiTool(AITool):
             print(f"MCP 配置: {mcp_file}")
         if config_file:
             print(f"browser 覆盖 (--config): {config_file}")
+        print(f"任务文件 (read): {prompt_file.resolve()}")
         print("进入 omp 后请先执行: /mcp list")
         print("判定 connected 即可继续 E2E；ListMcpResources 为空是正常的。")
         print("工具名形如: mcp_pi-agent_mcp__playwright_browser_navigate")
