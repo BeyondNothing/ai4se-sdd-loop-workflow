@@ -32,7 +32,7 @@ LangGraph 负责编排（状态管理、节点调度、续跑路由）；每个�
 ### 2.2 节点即独立 Agent
 
 1. 加载 `prompts/` 模板，注入 `{{ai_rules}}`、doc、state 变量
-2. 调用节点配置的 AI 工具（`cursor` / `claude_code` / `echo`）
+2. 调用节点配置的 AI 工具（`cursor` / `claude_code` / `oh_my_pi` / `echo`）
 3. 将产出写入 **应用项目根** `docs/<需求名>/`（非 `dev-workflow/` 内）
 
 **不共享 AI 会话**；上游信息仅通过 Markdown 与 state 字段传递。
@@ -63,6 +63,7 @@ workflow:
 | `app_root` | 应用项目根（业务代码 + docs 产出） | `..` |
 | `docs_dir` | 产出相对 app_root 的子目录 | `docs` |
 | `e2e.enabled` | 是否执行浏览器 E2E（Playwright MCP） | `true` |
+| `e2e.headless` | E2E 是否无界面运行（`false`=弹出 Chrome） | `false` |
 | `e2e.base_url` | E2E 服务基址（host/端口） | `http://localhost:8080` |
 
 扩展规则（各项目不同）见 `config/ai-rules.yaml`（从 `ai-rules.example.yaml` 复制，**不提交仓库**）。
@@ -85,7 +86,7 @@ workflow:
 └──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────┐
-│  AITool：cursor │ claude_code │ echo                     │
+│  AITool：cursor │ claude_code │ oh_my_pi (omp) │ echo       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -181,7 +182,7 @@ YAML 中还定义 `create_plan`、`design_test_cases` 两个 headless 子节点�
 
 - **唯一依据**：`verify_tests` 严格按 `02-test-cases.md`（及本节点补充的 E2E 用例）执行
 - **框架**：必须使用业务工程已有测试栈（JUnit、MockMvc、`src/test`、Maven/Gradle），禁止自建独立测试工程
-- **E2E**：仅 `verify_tests` prompt 描述；使用 Playwright MCP（`config/mcp/servers.json`）；截图写入 `docs/<req>/e2e-screenshots/`
+- **E2E**：仅 `verify_tests` prompt 描述；**必须**使用 Playwright MCP（`config/mcp/servers.json`）；截图写入 `docs/<req>/e2e-screenshots/`。**禁止** agent 在 MCP 失败时改用 Playwright CLI / 自建脚本；须告知用户 MCP 不可用并等待用户决策
 
 ### 5.2 开发阶段不涉及 E2E
 
@@ -292,7 +293,12 @@ analyze_requirements:
 |------|----------|-------------|
 | `cursor` | `agent -p --force --trust` | `agent --trust --force` |
 | `claude_code` | `claude --print` | `claude` |
+| `oh_my_pi` / `omp` | `omp -p --auto-approve --no-session` | `omp --auto-approve` |
 | `echo` | 回显 prompt（调试） | 跳过 |
+
+`oh_my_pi` 即 [Oh My Pi](https://omp.sh/) 终端 Agent，CLI 命令为 `omp`。使用前需安装并登录（如 `omp auth-broker login` 或配置 `ANTHROPIC_API_KEY` 等 provider 环境变量）。
+
+**Playwright MCP 与 omp 内置 browser 冲突**：omp 默认 `browser.enabled=true` 时会启用内置 Puppeteer browser，并**自动过滤** `.omp/mcp.json` 中的 `playwright` MCP（Cursor 无此行为）。`start.sh` 同步时会写入 **`.omp/config.yml`**（`browser.enabled: false`），omp 从项目根启动时会自动加载；workflow 启动 omp 时另注入 `config/omp-workflow.yaml` 作为双保险。若 `/mcp list` 只有 `pi-agent/browser` 而无 `playwright_browser_*`，请重新 `./start.sh` 同步后**新开 omp 会话**（旧会话不会热加载配置）。
 
 注册：`src/agents/registry.py`。
 
@@ -301,7 +307,7 @@ analyze_requirements:
 - **state**：`{{requirement}}`、`{{project_root}}`、`{{requirement_type}}` …
 - **doc**：`{{doc_01-requirements.md}}` — 读取当前需求目录下对应文件
 - **ai_rules**：`{{ai_rules}}` — 来自 `config/ai-rules.yaml` + `<app_root>/ai-rules/`
-- **verify 专用**：`{{e2e_enabled}}`、`{{e2e_base_url}}`
+- **verify 专用**：`{{e2e_enabled}}`、`{{e2e_headless}}`、`{{e2e_base_url}}`
 
 ---
 
@@ -392,7 +398,9 @@ langgraph dev   # 图 ID: dev_workflow
 ### MCP / E2E
 
 - Node 18+；`start.sh` 会尝试 nvm 切换版本
-- E2E 开启时自动同步 MCP 到 Cursor（除非 `--skip-mcp-setup` 或 `e2e.enabled: false`）
+- E2E 开启时自动同步 MCP 到 Cursor / Claude / Codex / **Oh My Pi**（`.omp/mcp.json` + `.omp/config.yml`），除非 `--skip-mcp-setup` 或 `e2e.enabled: false`
+- Playwright MCP 使用 `@playwright/mcp@0.0.79` + `--browser chrome`（优先系统 Google Chrome）；`workflow.e2e.headless: false`（默认）时不传 `--headless`，E2E 会弹出 Chrome 窗口；设为 `true` 则后台 headless 运行
+- **勿用** `--browser chromium`（旧配置会触发 `chrome-for-testing` revision 不匹配）；若 Cursor/omp 报 browser 未安装，重新 `./start.sh` 同步 MCP 后**重启 IDE/omp 会话**使 MCP 配置生效
 - 页面 path 由实现代码/报告确认；host/端口来自 `workflow.e2e.base_url`
 
 ---

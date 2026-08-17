@@ -42,6 +42,7 @@
 配置（`config/workflow.yaml`）：
 
 - `workflow.e2e.enabled`: **{{e2e_enabled}}**
+- `workflow.e2e.headless`: **{{e2e_headless}}**（`false`=有界面，E2E 时会弹出 Chrome；`true`=无界面 headless）
 - `workflow.e2e.base_url`: **{{e2e_base_url}}**
 
 若 `enabled` 为 **false**：跳过所有 `TC-E2E-*`，报告中标记 **skip**（不算失败），不调用 Playwright MCP。
@@ -49,9 +50,35 @@
 若 `enabled` 为 **true**：
 
 - 若需求含 Web UI，根据需求与实现报告补充/执行 `TC-E2E-*`
-- 使用 Playwright MCP（`config/mcp/servers.json`）执行浏览器步骤
+- **仅**使用 Playwright MCP（`config/mcp/servers.json`）执行浏览器步骤；**禁止**以下替代方式：
+  - `npx playwright` / Playwright CLI / 自建 Node·shell E2E 脚本
+  - 用 curl、截图工具、手工浏览器操作冒充 E2E 自动化结果
+  - 任何未通过 MCP 工具调用完成的「伪 E2E」
 - 服务基址 `{{e2e_base_url}}` + 实现报告/代码中的页面 path
-- 截图保存到 `{{docs_dir}}/e2e-screenshots/`，并在 `05-test-report.md` 用相对路径嵌入
+- 截图须由 MCP 浏览器操作产生，保存到 `{{docs_dir}}/e2e-screenshots/`，并在 `05-test-report.md` 用相对路径嵌入
+
+### Playwright MCP 就绪判定（**omp 必读，避免误判 blocked**）
+
+E2E 开始前按以下顺序自检，**不得**跳过：
+
+1. 在 omp 交互会话执行 **`/mcp list`**
+2. 若输出含 **`playwright | connected`**（或 connected via pi-agent）→ **视为 MCP 已连接**，继续 E2E
+3. **`ListMcpResources` 返回空是正常的**（Playwright 不暴露 resources），**不能**据此判定 MCP 未连接
+4. 实际工具名前缀为 **`mcp_pi-agent_mcp__playwright_browser_`**（例如 `...__playwright_browser_navigate`），不是裸名 `playwright_browser_navigate`
+5. 仅当 `/mcp list` **没有** playwright，或 **`browser_navigate` 调用报错** 时，才按 MCP 不可用处理
+
+### MCP 不可用时的处理（**必须遵守**）
+
+若 Playwright MCP 连接失败、Browser 打开超时、或 MCP 工具调用持续报错：
+
+1. **立即停止** E2E 执行，**不得**自行改用 CLI/脚本/其他工具继续
+2. 在**当前交互会话**中向用户说明：MCP 不可用、具体错误信息、已尝试的步骤
+3. 给出简要排查建议（如：Node 18+、系统 Google Chrome 或 `npx @playwright/mcp@0.0.79 install-browser chrome-for-testing`、`.omp/mcp.json` / `.cursor/mcp.json` 是否已同步、服务是否已启动）
+   - **浏览器未安装**：若报 `chrome-for-testing is not installed`，多为 MCP 配置使用了过时的 `--browser chromium`（应改为 `chrome`）或 `@latest` 与本地 browser revision 不一致；重新 `./start.sh` 会自动 sync 并检测系统 Chrome
+   - **Oh My Pi 专用**：若 `/mcp list` **没有** `playwright | connected`，或只有 `mcp_pi-agent_browser` 而无 `...__playwright_browser_*` 工具，说明内置 browser 仍在过滤 Playwright。重新 `./start.sh` 同步 `.omp/config.yml` + `.omp/mcp.json`，**退出并新开 omp 会话**（cwd 须在含 `.omp/` 的项目根）。**勿**因 `ListMcpResources` 为空就报 blocked
+4. **询问用户**是否继续（例如修复 MCP 后重试、或将 `e2e.enabled` 改为 false 后 skip E2E）
+5. **待用户明确回复后再继续**；不得在用户未授权时绕过 MCP 完成 E2E
+6. 测试报告中：`TC-E2E-*` 标记 **blocked**（非 pass/skip），`test_passed: false`，并记录阻塞原因
 
 ## 任务清单
 
@@ -74,7 +101,7 @@
 1. 逐条对照 `02-test-cases.md` 执行 `TC-UNIT-*`、`TC-API-*`
 2. **单元测试**：新增/补全测试类，运行项目测试命令，记录用例编号 ↔ 测试方法 ↔ 结果
 3. **API 测试**：断言与用例预期一致（状态码、关键字段、错误场景）
-4. **E2E**：按上文配置开关执行或 skip
+4. **E2E**：按上文配置开关执行或 skip；MCP 不可用时 **blocked 并询问用户**，禁止 CLI 回退
 5. 输出 **测试报告**，包含：用例追溯表、单元/API/E2E 各小节、执行命令、问题与建议、`test_passed: true/false`
 
 将测试报告写入 `{{output_path}}`。

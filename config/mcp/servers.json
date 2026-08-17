@@ -8,7 +8,15 @@
   "servers": {
     "playwright": {
       "enabled": true,
-      "wrapper": "scripts/playwright-mcp.sh"
+      "wrapper": "scripts/playwright-mcp.sh",
+      "args": [
+        "--browser",
+        "chrome",
+        "--timeout-navigation",
+        "60000",
+        "--timeout-action",
+        "60000"
+      ]
     }
   }
 }

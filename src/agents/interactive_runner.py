@@ -23,6 +23,7 @@ def run_interactive_subprocess(
     banner_title: str,
     completion_hint: str,
     completion_check: CompletionCheck | None = None,
+    env: dict[str, str] | None = None,
 ) -> AIToolResult:
     print("\n" + "=" * 60)
     print(banner_title)
@@ -32,7 +33,7 @@ def run_interactive_subprocess(
         print("退出 CLI 后 workflow 继续")
     print("=" * 60 + "\n")
 
-    proc = subprocess.Popen(cmd, cwd=cwd, start_new_session=True)
+    proc = subprocess.Popen(cmd, cwd=cwd, env=env, start_new_session=True)
     try:
         while proc.poll() is None:
             if completion_check and completion_check():

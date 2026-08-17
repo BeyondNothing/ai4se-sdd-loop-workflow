@@ -18,7 +18,7 @@ usage() {
 选项:
   -f, --file PATH     从文件读取需求（推荐）
   -n, --name NAME     需求目录名，产出落在 <应用根>/docs/<NAME>/
-  -t, --tool TOOL     覆盖 AI 工具: cursor | claude_code | echo
+  -t, --tool TOOL     覆盖 AI 工具: cursor | claude_code | oh_my_pi | omp | echo
   -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
   --fresh               清除已有产出（保留 00-requirement.md）后重来
@@ -101,6 +101,24 @@ ensure_node_for_playwright() {
   fi
 
   die "无法切换到 Node ${MIN_NODE_MAJOR}+，Playwright MCP 将无法连接"
+}
+
+ensure_playwright_browsers() {
+  if [[ "$SKIP_MCP_SETUP" -eq 1 ]]; then
+    return 0
+  fi
+
+  local script="$SCRIPT_DIR/scripts/playwright-mcp.sh"
+  [[ -x "$script" ]] || chmod +x "$script"
+
+  if [[ "$(uname -s)" == "Darwin" ]] && [[ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]]; then
+    echo "==> Playwright MCP: 使用系统 Google Chrome"
+    return 0
+  fi
+
+  echo "==> 安装 Playwright MCP 浏览器（无系统 Chrome 时）..."
+  npx -y @playwright/mcp@0.0.79 install-browser chrome-for-testing || \
+    npx -y playwright install chrome || true
 }
 
 # ---------- parse args ----------
@@ -247,6 +265,7 @@ if [[ "$SKIP_MCP_SETUP" -eq 1 ]]; then
 fi
 
 ensure_node_for_playwright
+ensure_playwright_browsers
 
 echo "==> 启动 workflow"
 echo "    python run.py ${RUN_ARGS[*]}"

@@ -54,7 +54,7 @@ def main():
     )
     parser.add_argument(
         "--tool",
-        choices=["cursor", "claude_code", "echo"],
+        choices=["cursor", "claude_code", "oh_my_pi", "omp", "echo"],
         help="覆盖所有节点的 AI 工具（调试用，修改 config/workflow.yaml 可永久配置）",
     )
     parser.add_argument(
@@ -114,12 +114,31 @@ def main():
 
     if not args.skip_mcp_setup:
         if wf_cfg.e2e_enabled:
-            mcp_result = ensure_mcp_for_agents(PROJECT_ROOT)
-            logging.info(
-                "MCP 已同步到 CLI (servers=%s, cursor=%s)",
-                mcp_result.get("servers", []),
-                ", ".join(mcp_result.get("cursor_mcp_files", [])),
+            mcp_result = ensure_mcp_for_agents(
+                PROJECT_ROOT,
+                e2e_headless=wf_cfg.e2e_headless,
             )
+            logging.info(
+                "MCP 已同步 (servers=%s, headless=%s, cursor=%s, omp=%s, omp_cfg=%s)",
+                mcp_result.get("servers", []),
+                wf_cfg.e2e_headless,
+                ", ".join(mcp_result.get("cursor_mcp_files", [])),
+                ", ".join(mcp_result.get("omp_mcp_files", [])),
+                ", ".join(mcp_result.get("omp_config_files", [])),
+            )
+            verify_tool = wf_cfg.nodes.get("verify_tests")
+            active_tool = args.tool or (verify_tool.tool if verify_tool else None)
+            if active_tool in ("oh_my_pi", "omp"):
+                from src.agents.oh_my_pi_agent import OhMyPiTool
+
+                ok = OhMyPiTool.verify_playwright_mcp(str(app_root))
+                if ok:
+                    logging.info("Oh My Pi Playwright MCP 预检通过")
+                else:
+                    logging.warning(
+                        "Oh My Pi Playwright MCP 预检失败：请确认已在项目根执行 ./start.sh，"
+                        "且 .omp/config.yml + .omp/mcp.json 存在；进入 omp 后执行 /mcp list 查看 playwright"
+                    )
         else:
             logging.info(
                 "E2E 已关闭 (workflow.e2e.enabled=false)，跳过 Playwright MCP 配置"

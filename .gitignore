@@ -11,6 +11,8 @@ config/ai-rules.yaml
 # Auto-generated MCP configs (start.sh / run.py → cli_sync)
 .cursor/mcp.json
 .mcp.json
+.omp/mcp.json
+.omp/config.yml
 .codex/
 
 # auth-service secrets & local data

@@ -38,6 +38,7 @@ class WorkflowConfig:
     app_root: str = ".."
     e2e_enabled: bool = True
     e2e_base_url: str = "http://localhost:8080"
+    e2e_headless: bool = False
 
 
 def _parse_bool(value: Any, default: bool = True) -> bool:
@@ -111,6 +112,7 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
         e2e = {}
     e2e_base_url = str(e2e.get("base_url") or "http://localhost:8080").strip().rstrip("/")
     e2e_enabled = _parse_bool(e2e.get("enabled"), default=True)
+    e2e_headless = _parse_bool(e2e.get("headless"), default=False)
     app_root = str(workflow.get("app_root") or "..").strip() or ".."
 
     nodes: dict[str, NodeConfig] = {}
@@ -132,5 +134,6 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
         app_root=app_root,
         e2e_enabled=e2e_enabled,
         e2e_base_url=e2e_base_url,
+        e2e_headless=e2e_headless,
         nodes=nodes,
     )
