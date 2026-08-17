@@ -1,0 +1,28 @@
+# 项目扩展规则配置
+#
+# 使用方式：
+#   cp config/ai-rules.example.yaml config/ai-rules.yaml
+#   按本项目修改 nodes 与 ai_rules_dir
+#
+# config/ai-rules.yaml 不提交仓库（见 .gitignore），各应用项目配置不同。
+#
+# ai_rules_dir: 规则 markdown 目录，相对 workflow.yaml 中的 app_root
+# nodes: 各 workflow 节点注入的规则文件（文件名相对 ai_rules_dir）
+
+ai_rules_dir: ai-rules
+
+nodes:
+  analyze_requirements:
+    - ddd-design-standard.md
+  create_plan:
+    - ddd-design-standard.md
+  design_test_cases:
+    - ddd-design-standard.md
+  review_plan_and_tests:
+    - ddd-design-standard.md
+  split_tasks:
+    - ddd-design-standard.md
+  implement_code:
+    - ddd-design-standard.md
+  verify_tests:
+    - ddd-design-standard.md
