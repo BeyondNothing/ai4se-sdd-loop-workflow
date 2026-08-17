@@ -2,7 +2,6 @@
 
 import logging
 import subprocess
-from pathlib import Path
 
 from .base import AITool, AIToolResult, CompletionCheck
 from .interactive_runner import run_interactive_subprocess
@@ -14,10 +13,6 @@ class ClaudeCodeTool(AITool):
     name = "claude_code"
 
     def run(self, prompt: str, cwd: str) -> AIToolResult:
-        prompt_file = Path(cwd) / ".dev-workflow" / "last_prompt.txt"
-        prompt_file.parent.mkdir(parents=True, exist_ok=True)
-        prompt_file.write_text(prompt, encoding="utf-8")
-
         for cmd in (
             ["claude", "--print", prompt],
             ["claude-code", "--print", prompt],
@@ -53,7 +48,7 @@ class ClaudeCodeTool(AITool):
             content=self._fallback_content(prompt),
             tool_name=self.name,
             success=False,
-            message=f"Claude Code CLI 不可用，prompt 已保存至 {prompt_file}",
+            message="Claude Code CLI 不可用",
         )
 
     def run_interactive(
@@ -63,10 +58,6 @@ class ClaudeCodeTool(AITool):
         *,
         completion_check: CompletionCheck | None = None,
     ) -> AIToolResult:
-        prompt_file = Path(cwd) / ".dev-workflow" / "last_prompt.txt"
-        prompt_file.parent.mkdir(parents=True, exist_ok=True)
-        prompt_file.write_text(prompt, encoding="utf-8")
-
         for binary in ("claude", "claude-code"):
             cmd = [binary, prompt]
             try:
@@ -86,7 +77,7 @@ class ClaudeCodeTool(AITool):
             content="",
             tool_name=self.name,
             success=False,
-            message=f"Claude Code CLI 不可用，prompt 已保存至 {prompt_file}",
+            message="Claude Code CLI 不可用",
         )
 
     @staticmethod

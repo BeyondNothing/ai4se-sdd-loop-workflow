@@ -3,6 +3,13 @@
 CLI: https://omp.sh/
 Headless: omp -p --auto-approve --no-session
 Interactive: omp（可选初始 prompt）
+
+Prompt 传递：与其它 AITool 不同，omp 将渲染后的全文写入
+`<应用根>/docs/<需求名>/temp-prompts/<node_id>.prompt.md`，
+启动时用短指令让 omp 以 read 工具打开该文件。
+
+注意：omp 的 `@file` 会把文件全文内联进首条消息；verify_tests 等大 prompt（~68KB）
+会导致启动超时、MCP 尚未就绪。因此禁止对大文件使用 `@`。
 """
 
 from __future__ import annotations
@@ -10,6 +17,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -22,15 +30,24 @@ logger = logging.getLogger(__name__)
 _EXTRA_BIN_DIRS = (Path.home() / ".local" / "bin",)
 _WORKING_LINE = re.compile(r"^Working\.+$")
 _MIN_NODE_MAJOR = 18
-# 过长 argv 会导致 omp 启动异常，MCP 无法加载（verify_tests prompt 常 >60KB）
-_LAUNCH_PROMPT_MAX_CHARS = 8_000
+_DEFAULT_PROMPT_STEM = "task"
+_TEMP_PROMPT_DIR = "temp-prompts"
 
 
 class OhMyPiTool(AITool):
     name = "oh_my_pi"
 
-    def run(self, prompt: str, cwd: str) -> AIToolResult:
-        prompt_file = self._save_prompt(prompt, cwd)
+    def run(
+        self,
+        prompt: str,
+        cwd: str,
+        *,
+        node_id: str | None = None,
+        prompt_dir: str | Path | None = None,
+    ) -> AIToolResult:
+        prompt_file = self._save_prompt(
+            prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
+        )
         binary = self._resolve_binary()
         if not binary:
             return AIToolResult(
@@ -40,13 +57,8 @@ class OhMyPiTool(AITool):
                 message=f"Oh My Pi CLI (omp) 不可用，prompt 已保存至 {prompt_file}",
             )
 
-        launch_prompt = self._launch_prompt(prompt, prompt_file, interactive=False)
-        cmd = self._build_cmd(
-            binary,
-            launch_prompt,
-            headless=True,
-            cwd=cwd,
-        )
+        cmd = self._build_cmd(binary, prompt_file, headless=True, cwd=cwd)
+        self._log_launch_cmd(cmd)
         try:
             logger.info("调用 Oh My Pi CLI (headless): %s", binary)
             proc = subprocess.run(
@@ -89,8 +101,12 @@ class OhMyPiTool(AITool):
         cwd: str,
         *,
         completion_check: CompletionCheck | None = None,
+        node_id: str | None = None,
+        prompt_dir: str | Path | None = None,
     ) -> AIToolResult:
-        prompt_file = self._save_prompt(prompt, cwd)
+        prompt_file = self._save_prompt(
+            prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
+        )
         binary = self._resolve_binary()
         if not binary:
             return AIToolResult(
@@ -100,14 +116,8 @@ class OhMyPiTool(AITool):
                 message=f"Oh My Pi CLI (omp) 不可用，prompt 已保存至 {prompt_file}",
             )
 
-        launch_prompt = self._launch_prompt(prompt, prompt_file, interactive=True)
-        cmd = self._build_cmd(
-            binary,
-            launch_prompt,
-            headless=False,
-            cwd=cwd,
-        )
-        self._print_interactive_banner(cwd, cmd, prompt_file)
+        cmd = self._build_cmd(binary, prompt_file, headless=False, cwd=cwd)
+        self._log_launch_cmd(cmd)
         try:
             logger.info("交互调用 Oh My Pi CLI: %s", binary)
             return run_interactive_subprocess(
@@ -131,7 +141,7 @@ class OhMyPiTool(AITool):
     def _build_cmd(
         cls,
         binary: str,
-        prompt: str,
+        prompt_file: Path,
         *,
         headless: bool,
         cwd: str,
@@ -157,9 +167,28 @@ class OhMyPiTool(AITool):
             )
         else:
             cmd.append("--auto-approve")
-        cmd.append(prompt)
-        logger.info("Oh My Pi 命令: %s", " ".join(cmd[:6]) + (" ..." if len(cmd) > 6 else ""))
+        cmd.append(cls._launch_prompt(prompt_file))
         return cmd
+
+    @staticmethod
+    def _launch_prompt(prompt_file: Path) -> str:
+        path = prompt_file.resolve()
+        return (
+            "Read and follow ALL instructions in this file using your read tool "
+            f"(do NOT use @ to inline it):\n{path}\n\n"
+            "Before any E2E or Playwright work: run `/mcp list` and confirm the "
+            "playwright server is ready. Call tools as mcp__playwright_browser_* "
+            "(e.g. mcp__playwright_browser_navigate), NOT browser_*. "
+            "Do NOT treat empty ListMcpResources, missing browser_* names, or "
+            "Unknown tool on browser_navigate as MCP unavailable.\n\n"
+            "Execute everything described in that file completely."
+        )
+
+    @staticmethod
+    def _log_launch_cmd(cmd: list[str]) -> None:
+        rendered = " ".join(shlex.quote(part) for part in cmd)
+        logger.info("Oh My Pi 启动命令: %s", rendered)
+        print(f"[omp] 启动命令:\n  {rendered}\n", flush=True)
 
     @classmethod
     def _resolve_omp_project_root(cls, cwd: str) -> Path | None:
@@ -194,84 +223,26 @@ class OhMyPiTool(AITool):
         return None
 
     @classmethod
-    def verify_playwright_mcp(cls, cwd: str) -> bool:
-        """Headless 预检：omp 会话是否可见 Playwright MCP 工具。"""
-        binary = cls._resolve_binary()
-        if not binary:
-            return False
-        probe = (
-            "List tool names containing playwright only, one per line. "
-            "If none, reply NONE."
-        )
-        cmd = cls._build_cmd(binary, probe, headless=True, cwd=cwd)
-        try:
-            proc = subprocess.run(
-                cmd,
-                cwd=cwd,
-                env=cls._subprocess_env(),
-                capture_output=True,
-                text=True,
-                timeout=120,
-                check=False,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            return False
-        output = f"{proc.stdout or ''}\n{proc.stderr or ''}"
-        return "playwright_browser_" in output.lower()
-
-    @classmethod
-    def _launch_prompt(
-        cls, prompt: str, prompt_file: Path, *, interactive: bool
-    ) -> str:
-        if len(prompt) <= _LAUNCH_PROMPT_MAX_CHARS:
-            return prompt
-        path = prompt_file.resolve()
-        logger.info(
-            "Oh My Pi 启动 prompt 过长 (%d chars)，改为 read 文件: %s",
-            len(prompt),
-            path,
-        )
-        header = (
-            "dev-workflow 节点任务全文已写入以下文件，请用 **read** 打开并逐条执行"
-            "（不要跳过文件中的约束）：\n"
-            f"{path}\n\n"
-            "第一步：执行 `/mcp list`。"
-            "若看到 `playwright | connected`，Playwright MCP 可用，可继续 E2E。"
-            "工具名前缀 `mcp_pi-agent_mcp__playwright_browser_`；"
-            "`ListMcpResources` 为空是正常的。\n"
-            "禁止用 eval/CLI 替代 Playwright MCP 做 E2E。"
-        )
-        if interactive:
-            return header
-        return f"{header}\n完成后按文件中的产出路径写入测试报告。"
-
-    @classmethod
-    def _print_interactive_banner(
-        cls, cwd: str, cmd: list[str], prompt_file: Path
-    ) -> None:
-        project_root = cls._resolve_omp_project_root(cwd)
-        mcp_file = (
-            project_root / ".omp" / "mcp.json" if project_root is not None else None
-        )
-        config_file = cls._resolve_omp_config_overlay(cwd, project_root)
-        print("\n--- Oh My Pi / Playwright MCP ---")
-        if project_root is not None:
-            print(f"项目根 (--cwd): {project_root}")
-        if mcp_file is not None:
-            print(f"MCP 配置: {mcp_file}")
-        if config_file:
-            print(f"browser 覆盖 (--config): {config_file}")
-        print(f"任务文件 (read): {prompt_file.resolve()}")
-        print("进入 omp 后请先执行: /mcp list")
-        print("判定 connected 即可继续 E2E；ListMcpResources 为空是正常的。")
-        print("工具名形如: mcp_pi-agent_mcp__playwright_browser_navigate")
-        print("---\n")
-
-    @staticmethod
-    def _save_prompt(prompt: str, cwd: str) -> Path:
-        prompt_file = Path(cwd) / ".dev-workflow" / "last_prompt.txt"
-        prompt_file.parent.mkdir(parents=True, exist_ok=True)
+    def _save_prompt(
+        cls,
+        prompt: str,
+        cwd: str,
+        *,
+        node_id: str | None = None,
+        prompt_dir: str | Path | None = None,
+    ) -> Path:
+        if prompt_dir is not None:
+            target_dir = Path(prompt_dir).resolve() / _TEMP_PROMPT_DIR
+        else:
+            root = cls._resolve_omp_project_root(cwd) or Path(cwd).resolve()
+            target_dir = root / "docs" / _TEMP_PROMPT_DIR
+        target_dir.mkdir(parents=True, exist_ok=True)
+        stem = node_id.strip() if node_id else _DEFAULT_PROMPT_STEM
+        prompt_file = target_dir / f"{stem}.prompt.md"
         prompt_file.write_text(prompt, encoding="utf-8")
+        size = len(prompt.encode("utf-8"))
+        logger.info("Oh My Pi prompt 已写入 %s (%d bytes)", prompt_file, size)
+        print(f"[omp] prompt 文件: {prompt_file} ({size} bytes)", flush=True)
         return prompt_file
 
     @classmethod

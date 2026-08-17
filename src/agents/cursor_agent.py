@@ -23,10 +23,6 @@ class CursorTool(AITool):
     name = "cursor"
 
     def run(self, prompt: str, cwd: str) -> AIToolResult:
-        prompt_file = Path(cwd) / ".dev-workflow" / "last_prompt.txt"
-        prompt_file.parent.mkdir(parents=True, exist_ok=True)
-        prompt_file.write_text(prompt, encoding="utf-8")
-
         cli_flags = ["-p", "--force", "--trust", "--approve-mcps", "--output-format", "text", prompt]
 
         for binary in self._resolve_binaries():
@@ -63,7 +59,7 @@ class CursorTool(AITool):
             content=self._fallback_content(prompt),
             tool_name=self.name,
             success=False,
-            message=f"Cursor CLI 不可用，prompt 已保存至 {prompt_file}",
+            message="Cursor CLI 不可用",
         )
 
     def run_interactive(
@@ -73,10 +69,6 @@ class CursorTool(AITool):
         *,
         completion_check: CompletionCheck | None = None,
     ) -> AIToolResult:
-        prompt_file = Path(cwd) / ".dev-workflow" / "last_prompt.txt"
-        prompt_file.parent.mkdir(parents=True, exist_ok=True)
-        prompt_file.write_text(prompt, encoding="utf-8")
-
         cli_flags = ["--trust", "--force", "--approve-mcps", prompt]
 
         for binary in self._resolve_binaries():
@@ -98,7 +90,7 @@ class CursorTool(AITool):
             content="",
             tool_name=self.name,
             success=False,
-            message=f"Cursor CLI 不可用，prompt 已保存至 {prompt_file}",
+            message="Cursor CLI 不可用",
         )
 
     @staticmethod

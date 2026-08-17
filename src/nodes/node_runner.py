@@ -67,6 +67,12 @@ class NodeRunner:
             node_cfg.tool,
             "interactive" if interactive else "headless",
         )
+        if node_cfg.tool in ("oh_my_pi", "omp"):
+            logger.info(
+                "omp 将把渲染后的 prompt 写入 %s/temp-prompts/%s.prompt.md",
+                docs_dir,
+                node_id,
+            )
 
         if interactive and not sys.stdin.isatty():
             logger.warning("当前非 TTY 终端，交互模式可能无法正常输入")
@@ -75,16 +81,25 @@ class NodeRunner:
             completion_check = self._build_completion_check(
                 node_id, docs_dir, state, output_path
             )
+            interactive_kwargs: dict[str, object] = {}
+            if node_cfg.tool in ("oh_my_pi", "omp"):
+                interactive_kwargs["node_id"] = node_id
+                interactive_kwargs["prompt_dir"] = str(docs_dir)
             result = tool.run_interactive(
                 prompt=prompt,
                 cwd=str(agent_cwd),
                 completion_check=completion_check,
+                **interactive_kwargs,
             )
             content, result = self._resolve_interactive_content(
                 docs_dir, output_path, node_id, result
             )
         else:
-            result = tool.run(prompt=prompt, cwd=str(agent_cwd))
+            run_kwargs: dict[str, object] = {}
+            if node_cfg.tool in ("oh_my_pi", "omp"):
+                run_kwargs["node_id"] = node_id
+                run_kwargs["prompt_dir"] = str(docs_dir)
+            result = tool.run(prompt=prompt, cwd=str(agent_cwd), **run_kwargs)
             content, result = self._resolve_headless_content(
                 docs_dir, output_path, node_id, result
             )

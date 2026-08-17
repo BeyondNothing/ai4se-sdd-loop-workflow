@@ -119,26 +119,12 @@ def main():
                 e2e_headless=wf_cfg.e2e_headless,
             )
             logging.info(
-                "MCP 已同步 (servers=%s, headless=%s, cursor=%s, omp=%s, omp_cfg=%s)",
+                "MCP 已同步 (servers=%s, headless=%s, cursor=%s, omp=%s)",
                 mcp_result.get("servers", []),
                 wf_cfg.e2e_headless,
                 ", ".join(mcp_result.get("cursor_mcp_files", [])),
                 ", ".join(mcp_result.get("omp_mcp_files", [])),
-                ", ".join(mcp_result.get("omp_config_files", [])),
             )
-            verify_tool = wf_cfg.nodes.get("verify_tests")
-            active_tool = args.tool or (verify_tool.tool if verify_tool else None)
-            if active_tool in ("oh_my_pi", "omp"):
-                from src.agents.oh_my_pi_agent import OhMyPiTool
-
-                ok = OhMyPiTool.verify_playwright_mcp(str(app_root))
-                if ok:
-                    logging.info("Oh My Pi Playwright MCP 预检通过")
-                else:
-                    logging.warning(
-                        "Oh My Pi Playwright MCP 预检失败：请确认已在项目根执行 ./start.sh，"
-                        "且 .omp/config.yml + .omp/mcp.json 存在；进入 omp 后执行 /mcp list 查看 playwright"
-                    )
         else:
             logging.info(
                 "E2E 已关闭 (workflow.e2e.enabled=false)，跳过 Playwright MCP 配置"

@@ -298,7 +298,7 @@ analyze_requirements:
 
 `oh_my_pi` 即 [Oh My Pi](https://omp.sh/) 终端 Agent，CLI 命令为 `omp`。使用前需安装并登录（如 `omp auth-broker login` 或配置 `ANTHROPIC_API_KEY` 等 provider 环境变量）。
 
-**Playwright MCP 与 omp 内置 browser 冲突**：omp 默认 `browser.enabled=true` 时会启用内置 Puppeteer browser，并**自动过滤** `.omp/mcp.json` 中的 `playwright` MCP（Cursor 无此行为）。`start.sh` 同步时会写入 **`.omp/config.yml`**（`browser.enabled: false`），omp 从项目根启动时会自动加载；workflow 启动 omp 时另注入 `config/omp-workflow.yaml` 作为双保险。若 `/mcp list` 只有 `pi-agent/browser` 而无 `playwright_browser_*`，请重新 `./start.sh` 同步后**新开 omp 会话**（旧会话不会热加载配置）。
+**Playwright MCP 与 omp 内置 browser 冲突**：omp 默认 `browser.enabled=true` 时会启用内置 Puppeteer browser，并**自动过滤** `.omp/mcp.json` 中的 `playwright` MCP（Cursor 无此行为）。`start.sh` 同步时会写入 **`.omp/config.yml`**（`browser.enabled: false`），omp 从项目根启动时会自动加载；workflow 启动 omp 时另注入 `config/omp-workflow.yaml` 作为双保险。若 `/mcp list` 只有 `pi-agent/browser` 而无 playwright，请重新 `./start.sh` 同步后**新开 omp 会话**（旧会话不会热加载配置）。omp 里 Playwright 工具名是 `mcp__playwright_browser_*`（如 `mcp__playwright_browser_navigate`），不是 Cursor 的裸名 `browser_*`；`/mcp list` 已 ready 时不要把 `browser_navigate` Unknown tool 当成 MCP 故障。
 
 注册：`src/agents/registry.py`。
 
