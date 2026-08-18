@@ -131,8 +131,8 @@ flowchart TD
 | `analyze_requirements` | 需求分析与澄清 | **interactive** | `draft/01-requirements.draft.md` → `01-requirements.md` | 澄清清单 + 定稿 + `requirement_approval` |
 | `parallel_plan_and_tests` | 并行计划与用例 | **headless** | `02-plan.md` + `02-test-cases.md` | 线程池并行跑 `create_plan`、`design_test_cases` |
 | `review_plan_and_tests` | 计划与用例评审 | **interactive** | `02-plan-test-review.md` | 业务视角交叉比对，同步修订 plan/test |
-| `split_tasks` | 任务拆分 | **interactive** | `03-tasks.md` | API 详细设计 + `tasks_approval` |
-| `implement_code` | 代码实现 | **interactive** | 业务代码 + `04-implementation.md` | **只写生产代码**，不写测试 |
+| `split_tasks` | 任务拆分 | **interactive** | `03-tasks.md` | API 详细设计 + `tasks_approval`；**不注入** `02-test-cases.md` |
+| `implement_code` | 代码实现 | **interactive** | 业务代码 + `04-implementation.md` | **只写生产代码**，不写测试；**不注入** `02-test-cases.md` |
 | `verify_tests` | 测试自验证 | **interactive** | `src/test` 测试代码 + `05-test-report.md` | 严格按用例执行单元/API/E2E |
 
 YAML 中还定义 `create_plan`、`design_test_cases` 两个 headless 子节点配置，由 `parallel_plan_and_tests` 内部调用，不单独出现在图上。
@@ -177,9 +177,12 @@ YAML 中还定义 `create_plan`、`design_test_cases` 两个 headless 子节点�
 | 阶段 | 单元 `TC-UNIT-*` | API `TC-API-*` | E2E `TC-E2E-*` |
 |------|------------------|----------------|----------------|
 | `design_test_cases` | 写入 `02-test-cases.md` | 写入 `02-test-cases.md` | 不在此阶段设计 |
-| `implement_code` | 不写 | 不写 | 不涉及 |
+| `review_plan_and_tests` | 交叉核对并同步修订 | 交叉核对并同步修订 | 不在此阶段设计 |
+| `split_tasks` | 不注入、不拆测试任务 | 不注入、不拆测试任务 | 不涉及 |
+| `implement_code` | 不写、不注入用例全文 | 不写、不注入用例全文 | 不涉及 |
 | `verify_tests` | 编写 + 运行 | 编写 + 运行 | 补充用例 + 执行（受 `e2e.enabled` 控制） |
 
+- **用例注入**：`02-test-cases.md` 只进入 `review_plan_and_tests`、`verify_tests` 的 prompt（`workflow.yaml` `inputs`）；`split_tasks` / `implement_code` 不读该文件
 - **唯一依据**：`verify_tests` 严格按 `02-test-cases.md`（及本节点补充的 E2E 用例）执行
 - **框架**：必须使用业务工程已有测试栈（JUnit、MockMvc、`src/test`、Maven/Gradle），禁止自建独立测试工程
 - **E2E**：仅 `verify_tests` prompt 描述；**必须**使用 Playwright MCP（`config/mcp/servers.json`）；截图写入 `docs/<req>/e2e-screenshots/`。**禁止** agent 在 MCP 失败时改用 Playwright CLI / 自建脚本；须告知用户 MCP 不可用并等待用户决策
@@ -305,9 +308,9 @@ analyze_requirements:
 ### 8.2 Prompt 变量
 
 - **state**：`{{requirement}}`、`{{project_root}}`、`{{requirement_type}}` …
-- **doc**：`{{doc_01-requirements.md}}` — 读取当前需求目录下对应文件
+- **doc**：`{{doc_01-requirements.md}}` — 读取当前需求目录下对应文件（仅该节点 `inputs` 里列出的 doc 会注入）
 - **ai_rules**：`{{ai_rules}}` — 来自 `config/ai-rules.yaml` + `<app_root>/ai-rules/`
-- **verify 专用**：`{{e2e_enabled}}`、`{{e2e_headless}}`、`{{e2e_base_url}}`
+- **verify 专用**：`{{e2e_enabled}}`、`{{e2e_headless}}`、`{{e2e_base_url}}`；`{{doc_02-test-cases.md}}` 仅在评审与 verify 节点注入
 
 ---
 

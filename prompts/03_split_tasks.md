@@ -29,10 +29,6 @@
 
 {{doc_02-plan.md}}
 
-## 测试用例
-
-{{doc_02-test-cases.md}}
-
 ## 计划与测试评审结论
 
 {{doc_02-plan-test-review.md}}
@@ -147,7 +143,7 @@ user_note: ""
 
 ### 测试任务边界
 
-- **单元测试（`TC-UNIT-*`）与 API 测试（`TC-API-*`）不在 `implement_code` 实现**；由 `verify_tests` 节点按 `02-test-cases.md` 编写并执行
+- **单元测试与 API 测试不在 `implement_code` 实现**；由后续 `verify_tests` 节点编写并执行
 - 任务清单中**不要**安排「编写单测/API 集成测试类」作为 implement 阶段任务；implement 任务 DoD 聚焦生产代码与可测性（Port 接口、分层清晰），不测具体断言
 
 ### 若 `requirement_type = new`
