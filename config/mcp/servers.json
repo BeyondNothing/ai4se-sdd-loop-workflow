@@ -3,7 +3,7 @@
     "modelscope": "https://modelscope.cn/mcp/servers/@microsoft/playwright-mcp",
     "upstream": "https://github.com/microsoft/playwright-mcp",
     "npm": "@playwright/mcp@latest",
-    "note": "Playwright MCP 经 scripts/playwright-mcp.sh 启动；sync 时写入本机仓库内脚本绝对路径"
+    "note": "Playwright MCP 经 scripts/playwright-mcp.sh 启动（Windows 同步时改用同名 .cmd）；sync 写入本机绝对路径"
   },
   "servers": {
     "playwright": {

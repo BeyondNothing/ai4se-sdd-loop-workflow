@@ -166,6 +166,14 @@ YAML 中还定义 `create_plan`、`design_test_cases` 两个 headless 子节点�
 ./start.sh --skip-clarification --name product-list-toc
 ```
 
+Windows（PowerShell / cmd，推荐 `start.cmd` 以免 ExecutionPolicy 拦截）：
+
+```bat
+cd dev-workflow
+.\start.cmd --name product-list-toc --file ..\docs\requirements\product-list-toc-requirement.md
+.\start.cmd --skip-clarification --name product-list-toc
+```
+
 每个产出 md 末尾由程序写入 **Workflow 状态** 表（`node`、`status`、`next_node`、`pending_count` 等），供人工查看；续跑以 **文件是否存在 + approval 块 + router 规则** 为准，不仅看 `next_node`。
 
 ---
@@ -336,7 +344,8 @@ analyze_requirements:
 ```text
 dev-workflow/
 ├── README.md
-├── start.sh                    # 推荐入口（venv + run.py）
+├── start.sh                    # macOS / Linux 入口（venv + run.py）
+├── start.ps1 / start.cmd       # Windows 入口（cmd 包装 PowerShell）
 ├── run.py
 ├── pyproject.toml
 ├── langgraph.json
@@ -384,6 +393,18 @@ cp config/ai-rules.example.yaml config/ai-rules.yaml   # 首次使用
 ./start.sh --name jwt-login --file ../docs/requirements/jwt-login-requirement.md
 ```
 
+Windows：
+
+```bat
+cd dev-workflow
+copy config\ai-rules.example.yaml config\ai-rules.yaml
+.\start.cmd --help
+.\start.cmd --tool echo --skip-clarification --file ..\docs\requirements\jwt-login-requirement.md
+.\start.cmd --name jwt-login --file ..\docs\requirements\jwt-login-requirement.md
+```
+
+需已安装 Python 3.10+（`python` / `py -3`）和 Node 18+（或 nvm-windows）。交互节点依赖本机已登录的 Cursor / Claude / omp CLI。
+
 ### 常用命令
 
 ```bash
@@ -400,8 +421,8 @@ langgraph dev   # 图 ID: dev_workflow
 
 ### MCP / E2E
 
-- Node 18+；`start.sh` 会尝试 nvm 切换版本
-- E2E 开启时自动同步 MCP 到 Cursor / Claude / Codex / **Oh My Pi**（`.omp/mcp.json` + `.omp/config.yml`），除非 `--skip-mcp-setup` 或 `e2e.enabled: false`
+- Node 18+；`start.sh` 会尝试 nvm 切换版本，Windows `start.ps1` 会尝试 nvm-windows
+- E2E 开启时自动同步 MCP 到 Cursor / Claude / Codex / **Oh My Pi**（`.omp/mcp.json` + `.omp/config.yml`），除非 `--skip-mcp-setup` 或 `e2e.enabled: false`；Windows 同步 Playwright wrapper 为 `scripts/playwright-mcp.cmd`
 - Playwright MCP 使用 `@playwright/mcp@0.0.79` + `--browser chrome`（优先系统 Google Chrome）；`workflow.e2e.headless: false`（默认）时不传 `--headless`，E2E 会弹出 Chrome 窗口；设为 `true` 则后台 headless 运行
 - **勿用** `--browser chromium`（旧配置会触发 `chrome-for-testing` revision 不匹配）；若 Cursor/omp 报 browser 未安装，重新 `./start.sh` 同步 MCP 后**重启 IDE/omp 会话**使 MCP 配置生效
 - 页面 path 由实现代码/报告确认；host/端口来自 `workflow.e2e.base_url`

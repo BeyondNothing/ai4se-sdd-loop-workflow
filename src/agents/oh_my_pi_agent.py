@@ -192,8 +192,7 @@ class OhMyPiTool(AITool):
 
     @classmethod
     def _resolve_omp_project_root(cls, cwd: str) -> Path | None:
-        base = Path(cwd).resolve()
-        for candidate in (base, base / "dev-workflow", base.parent):
+        for candidate in cls._omp_search_roots(Path(cwd).resolve()):
             if (candidate / ".omp" / "mcp.json").is_file():
                 return candidate.resolve()
         return None
@@ -205,8 +204,7 @@ class OhMyPiTool(AITool):
         roots: list[Path] = []
         if project_root is not None:
             roots.append(project_root)
-        base = Path(cwd).resolve()
-        roots.extend([base, base / "dev-workflow"])
+        roots.extend(cls._omp_search_roots(Path(cwd).resolve()))
         seen: set[str] = set()
         for root in roots:
             root_key = str(root)
@@ -216,11 +214,21 @@ class OhMyPiTool(AITool):
             for candidate in (
                 root / ".omp" / "config.yml",
                 root / "config" / "omp-workflow.yaml",
-                root / "dev-workflow" / "config" / "omp-workflow.yaml",
             ):
                 if candidate.is_file():
                     return str(candidate.resolve())
         return None
+
+    @staticmethod
+    def _omp_search_roots(base: Path) -> list[Path]:
+        """cwd、一层子目录、再向上，不依赖编排目录叫 dev-workflow。"""
+        roots: list[Path] = [base]
+        if base.is_dir():
+            for child in sorted(base.iterdir()):
+                if child.is_dir() and not child.name.startswith("."):
+                    roots.append(child)
+        roots.extend(base.parents)
+        return roots
 
     @classmethod
     def _save_prompt(

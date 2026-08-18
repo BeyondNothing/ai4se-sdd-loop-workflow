@@ -7,8 +7,8 @@
   - Codex:   {repo}/.codex/config.toml  （项目需被 Codex trust）
   - Oh My Pi: {repo}/.omp/mcp.json
 
-Playwright 通过仓库内 scripts/playwright-mcp.sh 启动；sync 时写入本机 clone 内脚本的绝对路径
-（非 nvm/node 路径，每台机器 clone 位置不同，由 start.sh / run.py 自动解析）。
+Playwright 通过仓库内 scripts/playwright-mcp.sh（Windows 为 .cmd）启动；
+sync 时写入本机 clone 内脚本的绝对路径（由 start.sh / start.ps1 / run.py 自动解析）。
 """
 
 from __future__ import annotations
@@ -68,11 +68,20 @@ def _merge_servers(existing: dict[str, Any], servers: dict[str, Any]) -> dict[st
     return {"mcpServers": merged}
 
 
-def _playwright_wrapper_entry(project_root: Path, wrapper: str) -> dict[str, Any]:
+def _resolve_playwright_wrapper(project_root: Path, wrapper: str) -> Path:
     script = (project_root / wrapper).resolve()
+    if os.name == "nt":
+        win_script = script.with_suffix(".cmd")
+        if win_script.exists():
+            return win_script
+    return script
+
+
+def _playwright_wrapper_entry(project_root: Path, wrapper: str) -> dict[str, Any]:
+    script = _resolve_playwright_wrapper(project_root, wrapper)
     if not script.exists():
         logger.warning("Playwright wrapper 脚本不存在: %s", script)
-    elif not os.access(script, os.X_OK):
+    elif script.suffix.lower() != ".cmd" and not os.access(script, os.X_OK):
         script.chmod(script.stat().st_mode | 0o111)
     return {"command": str(script), "args": []}
 
@@ -139,7 +148,7 @@ def _to_omp_server(server: dict[str, Any]) -> dict[str, Any]:
     command_text = str(command)
     args = [str(arg) for arg in (server.get("args") or [])]
 
-    # omp 对 .sh 直 exec 不稳定；统一经 bash 启动 wrapper（与 Cursor 行为对齐）
+    # omp 对脚本直 exec 不稳定：Unix 经 bash，Windows 经 cmd /c
     if command_text.endswith(".sh"):
         bash = shutil.which("bash") or "/bin/bash"
         entry = {
@@ -147,6 +156,14 @@ def _to_omp_server(server: dict[str, Any]) -> dict[str, Any]:
             "enabled": True,
             "command": bash,
             "args": [command_text, *args],
+        }
+    elif command_text.lower().endswith(".cmd"):
+        comspec = os.environ.get("COMSPEC") or shutil.which("cmd") or "cmd.exe"
+        entry = {
+            "type": "stdio",
+            "enabled": True,
+            "command": comspec,
+            "args": ["/c", command_text, *args],
         }
     else:
         entry = {

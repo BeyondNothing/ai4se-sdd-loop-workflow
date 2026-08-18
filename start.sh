@@ -14,6 +14,7 @@ usage() {
 用法:
   ./start.sh [选项] [需求描述]
   ./start.sh [选项] --file <需求文件>
+  Windows: .\\start.cmd [同样选项]
 
 选项:
   -f, --file PATH     从文件读取需求（推荐）
