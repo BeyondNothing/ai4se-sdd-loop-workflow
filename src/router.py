@@ -14,6 +14,7 @@ from .parsers.approval_parser import (
     parse_test_cases_approval,
 )
 from .parsers.requirement_parser import parse_requirement_metadata
+from .parsers.test_report_parser import parse_test_passed
 from .parsers.workflow_status_parser import WorkflowStatus, parse_workflow_status_file
 from .phase_gate import (
     phase_complete,
@@ -162,6 +163,15 @@ def restore_state_from_docs(docs_dir: Path, skip_clarification: bool) -> dict:
         restored.update(
             parse_tasks_approval(tasks.read_text(encoding="utf-8")).to_state("tasks_approved")
         )
+
+    report = docs_dir / "05-test-report.md"
+    if report.exists():
+        report_text = report.read_text(encoding="utf-8")
+        status = parse_workflow_status_file(report)
+        if status is not None and status.test_passed is not None:
+            restored["test_passed"] = status.test_passed
+        else:
+            restored["test_passed"] = parse_test_passed(report_text)
 
     if skip_clarification:
         restored["skip_clarification"] = True

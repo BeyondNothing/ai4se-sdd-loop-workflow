@@ -3,6 +3,8 @@
 官方入口是 `agent`（非交互脚本用 `-p/--print`），见：
 https://cursor.com/docs/cli/headless
 兼容旧命令名 `cursor-agent`。
+
+Prompt 写入 docs/<需求>/temp-prompts/ 后只把短指令放进 argv，避免 Windows 命令行超限。
 """
 
 import logging
@@ -13,6 +15,7 @@ from pathlib import Path
 
 from .base import AITool, AIToolResult, CompletionCheck
 from .interactive_runner import run_interactive_subprocess
+from .prompt_file import launch_read_prompt, save_node_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +25,27 @@ _EXTRA_BIN_DIRS = (Path.home() / ".local" / "bin",)
 class CursorTool(AITool):
     name = "cursor"
 
-    def run(self, prompt: str, cwd: str) -> AIToolResult:
-        cli_flags = ["-p", "--force", "--trust", "--approve-mcps", "--output-format", "text", prompt]
+    def run(
+        self,
+        prompt: str,
+        cwd: str,
+        *,
+        node_id: str | None = None,
+        prompt_dir: str | None = None,
+    ) -> AIToolResult:
+        prompt_file = save_node_prompt(
+            prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
+        )
+        launch = launch_read_prompt(prompt_file)
+        cli_flags = [
+            "-p",
+            "--force",
+            "--trust",
+            "--approve-mcps",
+            "--output-format",
+            "text",
+            launch,
+        ]
 
         for binary in self._resolve_binaries():
             cmd = [binary, *cli_flags]
@@ -68,8 +90,14 @@ class CursorTool(AITool):
         cwd: str,
         *,
         completion_check: CompletionCheck | None = None,
+        node_id: str | None = None,
+        prompt_dir: str | None = None,
     ) -> AIToolResult:
-        cli_flags = ["--trust", "--force", "--approve-mcps", prompt]
+        prompt_file = save_node_prompt(
+            prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
+        )
+        launch = launch_read_prompt(prompt_file)
+        cli_flags = ["--trust", "--force", "--approve-mcps", launch]
 
         for binary in self._resolve_binaries():
             cmd = [binary, *cli_flags]

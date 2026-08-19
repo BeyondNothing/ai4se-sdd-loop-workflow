@@ -8,7 +8,14 @@ from .base import AITool, AIToolResult
 class EchoTool(AITool):
     name = "echo"
 
-    def run(self, prompt: str, cwd: str) -> AIToolResult:
+    def run(
+        self,
+        prompt: str,
+        cwd: str,
+        *,
+        node_id: str | None = None,
+        prompt_dir: str | None = None,
+    ) -> AIToolResult:
         content = (
             f"# Echo 模式输出\n\n"
             f"> 生成时间: {datetime.now().isoformat(timespec='seconds')}\n"
@@ -25,6 +32,8 @@ class EchoTool(AITool):
         cwd: str,
         *,
         completion_check=None,
+        node_id: str | None = None,
+        prompt_dir: str | None = None,
     ) -> AIToolResult:
         print("\n[echo] 交互澄清需要真实 AI CLI；echo 模式跳过交互会话。\n")
         return AIToolResult(

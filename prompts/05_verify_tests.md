@@ -73,7 +73,7 @@
    - **Oh My Pi 专用**：若只有 `mcp_pi-agent_browser` 而无 Playwright MCP，重新 `./start.sh` 同步 `.omp/config.yml`（`browser.enabled: false`）并新开 omp 会话
 4. **询问用户**是否继续（例如修复 MCP 后重试、或将 `e2e.enabled` 改为 false 后 skip E2E）
 5. **待用户明确回复后再继续**；不得在用户未授权时绕过 MCP 完成 E2E
-6. 测试报告中：`TC-E2E-*` 标记 **blocked**（非 pass/skip），`test_passed: false`，并记录阻塞原因
+6. 测试报告**正文最后一张表**中：对应 `TC-E2E-*` 的结果列标 **blocked**（非 pass/skip），并记录阻塞原因
 
 ## 任务清单
 
@@ -89,7 +89,7 @@
 
 `{{output_path}}`
 
-报告必须包含 `test_passed: true/false` 或「测试结论」。产出写入后 workflow 将自动结束。
+报告须含用例结果表。产出写入后，编排会在文末写入 `## Workflow 状态`（含 `test_passed`）并结束本节点。
 
 ## 执行要求
 
@@ -97,6 +97,18 @@
 2. **单元测试**：新增/补全测试类，运行项目测试命令，记录用例编号 ↔ 测试方法 ↔ 结果
 3. **API 测试**：断言与用例预期一致（状态码、关键字段、错误场景）
 4. **E2E**：按上文配置开关执行或 skip；MCP 不可用时 **blocked 并询问用户**，禁止 CLI 回退
-5. 输出 **测试报告**，包含：用例追溯表、单元/API/E2E 各小节、执行命令、问题与建议、`test_passed: true/false`
+5. 输出 **测试报告**，包含：单元/API/E2E 各小节、执行命令、问题与建议，以及一张用例结果表
+
+用例结果表格式：
+
+```markdown
+| 用例编号 | 结果 |
+|----------|------|
+| TC-UNIT-01 | pass |
+| TC-API-01 | pass |
+| TC-E2E-01 | skip |
+```
+
+结果列只允许 `pass` / `skip` / `fail` / `blocked`。编排据此写入文末 Workflow 状态表的 `test_passed`；收尾打印与续跑都只读那张状态表。全部为 `pass` 或 `skip` 则 `test_passed: true`；任一行 `fail` / `blocked` 则为 `false`。
 
 将测试报告写入 `{{output_path}}`。

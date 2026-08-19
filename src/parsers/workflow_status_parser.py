@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +20,7 @@ class WorkflowStatus:
     pending_count: int = 0
     all_resolved: bool = True
     updated_at: str = ""
+    test_passed: bool | None = None
 
     @classmethod
     def from_mapping(cls, data: dict[str, str]) -> WorkflowStatus:
@@ -45,10 +45,11 @@ class WorkflowStatus:
             pending_count=pending_count,
             all_resolved=all_resolved,
             updated_at=data.get("updated_at", "").strip(),
+            test_passed=_parse_optional_bool(data.get("test_passed")),
         )
 
     def to_mapping(self) -> dict[str, str]:
-        return {
+        data = {
             "node": self.node,
             "status": self.status,
             "next_node": self.next_node,
@@ -57,6 +58,9 @@ class WorkflowStatus:
             "all_resolved": str(self.all_resolved).lower(),
             "updated_at": self.updated_at or datetime.now().isoformat(timespec="seconds"),
         }
+        if self.test_passed is not None:
+            data["test_passed"] = "true" if self.test_passed else "false"
+        return data
 
 
 def parse_workflow_status(content: str) -> WorkflowStatus | None:
@@ -98,6 +102,19 @@ def upsert_workflow_status(content: str, status: WorkflowStatus) -> str:
         prefix = content.split(STATUS_HEADING, 1)[0].rstrip()
         return f"{prefix}\n\n{table}\n"
     return f"{content.rstrip()}\n\n{table}\n"
+
+
+def _parse_optional_bool(raw: str | None) -> bool | None:
+    if raw is None:
+        return None
+    value = raw.strip().lower()
+    if not value:
+        return None
+    if value in ("true", "yes", "1", "通过"):
+        return True
+    if value in ("false", "no", "0", "失败"):
+        return False
+    return None
 
 
 def _parse_markdown_table(section: str) -> dict[str, str]:

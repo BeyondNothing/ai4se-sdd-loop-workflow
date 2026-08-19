@@ -4,12 +4,9 @@ CLI: https://omp.sh/
 Headless: omp -p --auto-approve --no-session
 Interactive: omp（可选初始 prompt）
 
-Prompt 传递：与其它 AITool 不同，omp 将渲染后的全文写入
+Prompt 与 Cursor / Claude 相同：写入
 `<应用根>/docs/<需求名>/temp-prompts/<node_id>.prompt.md`，
-启动时用短指令让 omp 以 read 工具打开该文件。
-
-注意：omp 的 `@file` 会把文件全文内联进首条消息；verify_tests 等大 prompt（~68KB）
-会导致启动超时、MCP 尚未就绪。因此禁止对大文件使用 `@`。
+启动时只用短指令让工具 read 该文件（禁止 `@` 内联，以免超 Windows argv 上限）。
 """
 
 from __future__ import annotations
@@ -24,14 +21,13 @@ from pathlib import Path
 
 from .base import AITool, AIToolResult, CompletionCheck
 from .interactive_runner import run_interactive_subprocess
+from .prompt_file import launch_read_prompt, save_node_prompt
 
 logger = logging.getLogger(__name__)
 
 _EXTRA_BIN_DIRS = (Path.home() / ".local" / "bin",)
 _WORKING_LINE = re.compile(r"^Working\.+$")
 _MIN_NODE_MAJOR = 18
-_DEFAULT_PROMPT_STEM = "task"
-_TEMP_PROMPT_DIR = "temp-prompts"
 
 
 class OhMyPiTool(AITool):
@@ -45,7 +41,7 @@ class OhMyPiTool(AITool):
         node_id: str | None = None,
         prompt_dir: str | Path | None = None,
     ) -> AIToolResult:
-        prompt_file = self._save_prompt(
+        prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
         binary = self._resolve_binary()
@@ -104,7 +100,7 @@ class OhMyPiTool(AITool):
         node_id: str | None = None,
         prompt_dir: str | Path | None = None,
     ) -> AIToolResult:
-        prompt_file = self._save_prompt(
+        prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
         binary = self._resolve_binary()
@@ -172,16 +168,15 @@ class OhMyPiTool(AITool):
 
     @staticmethod
     def _launch_prompt(prompt_file: Path) -> str:
-        path = prompt_file.resolve()
-        return (
-            "Read and follow ALL instructions in this file using your read tool "
-            f"(do NOT use @ to inline it):\n{path}\n\n"
-            "Before any E2E or Playwright work: run `/mcp list` and confirm the "
-            "playwright server is ready. Call tools as mcp__playwright_browser_* "
-            "(e.g. mcp__playwright_browser_navigate), NOT browser_*. "
-            "Do NOT treat empty ListMcpResources, missing browser_* names, or "
-            "Unknown tool on browser_navigate as MCP unavailable.\n\n"
-            "Execute everything described in that file completely."
+        return launch_read_prompt(
+            prompt_file,
+            extra=(
+                "Before any E2E or Playwright work: run `/mcp list` and confirm the "
+                "playwright server is ready. Call tools as mcp__playwright_browser_* "
+                "(e.g. mcp__playwright_browser_navigate), NOT browser_*. "
+                "Do NOT treat empty ListMcpResources, missing browser_* names, or "
+                "Unknown tool on browser_navigate as MCP unavailable."
+            ),
         )
 
     @staticmethod
@@ -229,29 +224,6 @@ class OhMyPiTool(AITool):
                     roots.append(child)
         roots.extend(base.parents)
         return roots
-
-    @classmethod
-    def _save_prompt(
-        cls,
-        prompt: str,
-        cwd: str,
-        *,
-        node_id: str | None = None,
-        prompt_dir: str | Path | None = None,
-    ) -> Path:
-        if prompt_dir is not None:
-            target_dir = Path(prompt_dir).resolve() / _TEMP_PROMPT_DIR
-        else:
-            root = cls._resolve_omp_project_root(cwd) or Path(cwd).resolve()
-            target_dir = root / "docs" / _TEMP_PROMPT_DIR
-        target_dir.mkdir(parents=True, exist_ok=True)
-        stem = node_id.strip() if node_id else _DEFAULT_PROMPT_STEM
-        prompt_file = target_dir / f"{stem}.prompt.md"
-        prompt_file.write_text(prompt, encoding="utf-8")
-        size = len(prompt.encode("utf-8"))
-        logger.info("Oh My Pi prompt 已写入 %s (%d bytes)", prompt_file, size)
-        print(f"[omp] prompt 文件: {prompt_file} ({size} bytes)", flush=True)
-        return prompt_file
 
     @classmethod
     def _subprocess_env(cls) -> dict[str, str]:

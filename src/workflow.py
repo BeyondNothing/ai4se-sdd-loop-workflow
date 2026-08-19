@@ -299,7 +299,6 @@ class DevWorkflow:
                 "resume_from_node": "",
             }
             done_state.update(restore_state_from_docs(docs_path, skip_clarification))
-            done_state["test_passed"] = True
             return done_state
 
         start_node = determine_start_node(

@@ -1,7 +1,6 @@
 """通用节点执行器 — 每个节点是独立 agent，读取配置后执行。"""
 
 import logging
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +18,7 @@ from ..parsers.approval_parser import (
     parse_test_cases_approval,
 )
 from ..parsers.requirement_parser import RequirementMetadata, parse_requirement_metadata
+from ..parsers.test_report_parser import has_test_result_table, parse_test_passed
 from ..parsers.workflow_status_parser import WorkflowStatus, upsert_workflow_status
 from ..phase_gate import (
     PHASE_CONFIGS,
@@ -67,9 +67,10 @@ class NodeRunner:
             node_cfg.tool,
             "interactive" if interactive else "headless",
         )
-        if node_cfg.tool in ("oh_my_pi", "omp"):
+        if node_cfg.tool in ("cursor", "claude_code", "oh_my_pi", "omp"):
             logger.info(
-                "omp 将把渲染后的 prompt 写入 %s/temp-prompts/%s.prompt.md",
+                "%s 将把渲染后的 prompt 写入 %s/temp-prompts/%s.prompt.md",
+                node_cfg.tool,
                 docs_dir,
                 node_id,
             )
@@ -81,25 +82,23 @@ class NodeRunner:
             completion_check = self._build_completion_check(
                 node_id, docs_dir, state, output_path
             )
-            interactive_kwargs: dict[str, object] = {}
-            if node_cfg.tool in ("oh_my_pi", "omp"):
-                interactive_kwargs["node_id"] = node_id
-                interactive_kwargs["prompt_dir"] = str(docs_dir)
             result = tool.run_interactive(
                 prompt=prompt,
                 cwd=str(agent_cwd),
                 completion_check=completion_check,
-                **interactive_kwargs,
+                node_id=node_id,
+                prompt_dir=str(docs_dir),
             )
             content, result = self._resolve_interactive_content(
                 docs_dir, output_path, node_id, result
             )
         else:
-            run_kwargs: dict[str, object] = {}
-            if node_cfg.tool in ("oh_my_pi", "omp"):
-                run_kwargs["node_id"] = node_id
-                run_kwargs["prompt_dir"] = str(docs_dir)
-            result = tool.run(prompt=prompt, cwd=str(agent_cwd), **run_kwargs)
+            result = tool.run(
+                prompt=prompt,
+                cwd=str(agent_cwd),
+                node_id=node_id,
+                prompt_dir=str(docs_dir),
+            )
             content, result = self._resolve_headless_content(
                 docs_dir, output_path, node_id, result
             )
@@ -298,7 +297,13 @@ class NodeRunner:
                     updates.update(checklist.to_state())
 
         if node_id == "verify_tests":
-            updates["test_passed"] = self._parse_test_passed(content)
+            report_path = docs_dir / "05-test-report.md"
+            report = (
+                report_path.read_text(encoding="utf-8")
+                if report_path.exists()
+                else content
+            )
+            updates["test_passed"] = parse_test_passed(report)
 
         return updates
 
@@ -412,6 +417,10 @@ class NodeRunner:
         ):
             next_node = "parallel_plan_and_tests"
 
+        test_passed = None
+        if node_id == "verify_tests":
+            test_passed = bool(state.get("test_passed"))
+
         return WorkflowStatus(
             node=node_id,
             status="completed" if success else "failed",
@@ -420,6 +429,7 @@ class NodeRunner:
             pending_count=pending,
             all_resolved=all_resolved,
             updated_at=datetime.now().isoformat(timespec="seconds"),
+            test_passed=test_passed,
         )
 
     @staticmethod
@@ -582,23 +592,6 @@ class NodeRunner:
         header += "\n---\n\n"
         return header + content
 
-    @staticmethod
-    def _parse_test_passed(content: str) -> bool:
-        for line in content.splitlines():
-            stripped = line.strip().lower().strip("*")
-            if stripped.startswith("test_passed:"):
-                val = stripped.split(":", 1)[1].strip()
-                if val in ("true", "yes", "pass", "通过"):
-                    return True
-                if val in ("false", "no", "fail", "失败"):
-                    return False
-        if re.search(r"测试结论\s*[:：]\s*通过", content):
-            return True
-        if re.search(r"测试结论\s*[:：]\s*(未通过|失败|fail)", content, re.IGNORECASE):
-            return False
-        return False
-
-
 def _node_output_complete(node_id: str, output_path: Path, *, min_chars: int = 120) -> bool:
     if not output_path.exists():
         return False
@@ -607,7 +600,5 @@ def _node_output_complete(node_id: str, output_path: Path, *, min_chars: int = 1
     if len(body) < min_chars:
         return False
     if node_id == "verify_tests":
-        lowered = body.lower()
-        if "test_passed:" not in lowered and "测试结论" not in body:
-            return False
+        return has_test_result_table(body)
     return True

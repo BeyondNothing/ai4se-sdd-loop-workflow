@@ -302,10 +302,12 @@ analyze_requirements:
 
 | 工具 | headless | interactive |
 |------|----------|-------------|
-| `cursor` | `agent -p --force --trust` | `agent --trust --force` |
-| `claude_code` | `claude --print --permission-mode bypassPermissions --dangerously-skip-permissions` | 同上（无 `--print`） |
-| `oh_my_pi` / `omp` | `omp -p --auto-approve --no-session` | `omp --auto-approve` |
+| `cursor` | `agent -p --force --trust` + 短指令（先 read prompt 文件） | `agent --trust --force` + 短指令 |
+| `claude_code` | `claude --print --permission-mode bypassPermissions --dangerously-skip-permissions` + 短指令 | 同上（无 `--print`） |
+| `oh_my_pi` / `omp` | `omp -p --auto-approve --no-session` + 短指令 | `omp --auto-approve` + 短指令 |
 | `echo` | 回显 prompt（调试） | 跳过 |
+
+`cursor` / `claude_code` / `omp` 都先把渲染后的全文写入 `docs/<需求名>/temp-prompts/<node_id>.prompt.md`，argv 里只放「read 该文件」的短指令，避免 Windows 命令行约 32KB 上限把评审等大 prompt 截断。禁止用 `@` 内联该文件。
 
 `oh_my_pi` 即 [Oh My Pi](https://omp.sh/) 终端 Agent，CLI 命令为 `omp`。使用前需安装并登录（如 `omp auth-broker login` 或配置 `ANTHROPIC_API_KEY` 等 provider 环境变量）。
 
@@ -335,7 +337,7 @@ analyze_requirements:
 | `clarification_*` | 澄清清单状态 |
 | `skip_clarification` | CLI `--skip-clarification` |
 | `node_outputs` / `completed_nodes` | 累积型 reducer |
-| `test_passed` | 由 `05-test-report.md` 解析 |
+| `test_passed` | 读 `05-test-report.md` 文末 Workflow 状态表的 `test_passed` 字段 |
 
 ---
 
