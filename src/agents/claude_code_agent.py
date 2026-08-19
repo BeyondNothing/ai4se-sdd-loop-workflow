@@ -8,15 +8,20 @@ from .interactive_runner import run_interactive_subprocess
 
 logger = logging.getLogger(__name__)
 
+# 与 Cursor --force/--trust、omp --auto-approve 对齐：写文件/Bash 不再逐条确认
+_PERMISSION_FLAGS = (
+    "--permission-mode",
+    "bypassPermissions",
+    "--dangerously-skip-permissions",
+)
+
 
 class ClaudeCodeTool(AITool):
     name = "claude_code"
 
     def run(self, prompt: str, cwd: str) -> AIToolResult:
-        for cmd in (
-            ["claude", "--print", prompt],
-            ["claude-code", "--print", prompt],
-        ):
+        for binary in ("claude", "claude-code"):
+            cmd = [binary, "--print", *_PERMISSION_FLAGS, prompt]
             try:
                 proc = subprocess.run(
                     cmd,
@@ -59,7 +64,7 @@ class ClaudeCodeTool(AITool):
         completion_check: CompletionCheck | None = None,
     ) -> AIToolResult:
         for binary in ("claude", "claude-code"):
-            cmd = [binary, prompt]
+            cmd = [binary, *_PERMISSION_FLAGS, prompt]
             try:
                 logger.info("交互调用 Claude Code CLI: %s", binary)
                 return run_interactive_subprocess(

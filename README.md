@@ -303,7 +303,7 @@ analyze_requirements:
 | 工具 | headless | interactive |
 |------|----------|-------------|
 | `cursor` | `agent -p --force --trust` | `agent --trust --force` |
-| `claude_code` | `claude --print` | `claude` |
+| `claude_code` | `claude --print --permission-mode bypassPermissions --dangerously-skip-permissions` | 同上（无 `--print`） |
 | `oh_my_pi` / `omp` | `omp -p --auto-approve --no-session` | `omp --auto-approve` |
 | `echo` | 回显 prompt（调试） | 跳过 |
 
