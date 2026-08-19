@@ -1,5 +1,17 @@
-# start.ps1 — 创建虚拟环境、安装依赖并启动 dev-workflow（Windows）
+﻿# start.ps1 — 创建虚拟环境、安装依赖并启动 workflow（Windows）
+# 本文件须以 UTF-8 BOM 保存，Windows PowerShell 5.1 才能正确解析中文。
 $ErrorActionPreference = "Stop"
+try {
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [Console]::InputEncoding = $utf8
+    [Console]::OutputEncoding = $utf8
+    $OutputEncoding = $utf8
+    $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+} catch {
+}
+if (-not $env:PYTHONIOENCODING) { $env:PYTHONIOENCODING = 'utf-8' }
+if (-not $env:PYTHONUTF8) { $env:PYTHONUTF8 = '1' }
+try { chcp 65001 | Out-Null } catch { }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir

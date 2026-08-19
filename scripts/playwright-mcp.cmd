@@ -1,5 +1,6 @@
-@echo off
+﻿@echo off
 setlocal EnableExtensions
+chcp 65001 >nul
 REM 启动 Playwright MCP（stdio）。供 Cursor / Claude / Oh My Pi agent 调用。
 
 set "MIN_NODE_MAJOR=18"
