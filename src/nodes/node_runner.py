@@ -18,7 +18,7 @@ from ..parsers.approval_parser import (
     parse_test_cases_approval,
 )
 from ..parsers.requirement_parser import RequirementMetadata, parse_requirement_metadata
-from ..parsers.test_report_parser import has_test_result_table, parse_test_passed
+from ..parsers.test_report_parser import parse_test_passed, verify_report_ready
 from ..parsers.workflow_status_parser import WorkflowStatus, upsert_workflow_status
 from ..phase_gate import (
     PHASE_CONFIGS,
@@ -600,5 +600,9 @@ def _node_output_complete(node_id: str, output_path: Path, *, min_chars: int = 1
     if len(body) < min_chars:
         return False
     if node_id == "verify_tests":
-        return has_test_result_table(body)
+        if any(output_path.parent.glob("*.png")) or any(
+            output_path.parent.glob("*.jpg")
+        ):
+            return False
+        return verify_report_ready(body)
     return True

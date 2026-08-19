@@ -193,7 +193,7 @@ cd dev-workflow
 - **用例注入**：`02-test-cases.md` 只进入 `review_plan_and_tests`、`verify_tests` 的 prompt（`workflow.yaml` `inputs`）；`split_tasks` / `implement_code` 不读该文件
 - **唯一依据**：`verify_tests` 严格按 `02-test-cases.md`（及本节点补充的 E2E 用例）执行
 - **框架**：必须使用业务工程已有测试栈（JUnit、MockMvc、`src/test`、Maven/Gradle），禁止自建独立测试工程
-- **E2E**：仅 `verify_tests` prompt 描述；**必须**使用 Playwright MCP（`config/mcp/servers.json`）；截图写入 `docs/<req>/e2e-screenshots/`。**禁止** agent 在 MCP 失败时改用 Playwright CLI / 自建脚本；须告知用户 MCP 不可用并等待用户决策
+- **E2E**：仅 `verify_tests` prompt 描述；**必须**使用 Playwright MCP（`config/mcp/servers.json`）；截图**只**写入 `docs/<req>/e2e-screenshots/`（独立目录，禁止与 `05-test-report.md` 同级）。**禁止** agent 在 MCP 失败时改用 Playwright CLI / 自建脚本；须告知用户 MCP 不可用并等待用户决策
 
 ### 5.2 开发阶段不涉及 E2E
 

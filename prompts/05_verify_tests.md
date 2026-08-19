@@ -61,7 +61,11 @@
   - 用 curl、截图工具、手工浏览器操作冒充 E2E 自动化结果
   - 任何未通过 MCP 工具调用完成的「伪 E2E」
 - 服务基址 `{{e2e_base_url}}` + 实现报告/代码中的页面 path
-- 截图须由 MCP 浏览器操作产生，保存到 `{{docs_dir}}/e2e-screenshots/`，并在 `05-test-report.md` 用相对路径嵌入
+- 截图必须写入**独立目录** `{{docs_dir}}/e2e-screenshots/`（不要和图文混在需求目录根下）
+  - **只允许**写入该目录下的 `png` / `jpg` / `webp`
+  - **禁止**把截图写到 `{{docs_dir}}/` 根目录（与 `05-test-report.md`、`00-requirement.md` 同级）
+  - Playwright MCP 截图时必须指定完整文件名，例如 `{{docs_dir}}/e2e-screenshots/tc-e2e-01-first-screen.png`
+  - E2E 小节必须用相对路径**嵌入图片**，不能只写路径文字：`![TC-E2E-01 首屏](e2e-screenshots/tc-e2e-01-first-screen.png)`
 
 ### MCP 不可用时的处理（**必须遵守**）
 
@@ -73,7 +77,7 @@
    - **Oh My Pi 专用**：若只有 `mcp_pi-agent_browser` 而无 Playwright MCP，重新 `./start.sh` 同步 `.omp/config.yml`（`browser.enabled: false`）并新开 omp 会话
 4. **询问用户**是否继续（例如修复 MCP 后重试、或将 `e2e.enabled` 改为 false 后 skip E2E）
 5. **待用户明确回复后再继续**；不得在用户未授权时绕过 MCP 完成 E2E
-6. 测试报告**正文最后一张表**中：对应 `TC-E2E-*` 的结果列标 **blocked**（非 pass/skip），并记录阻塞原因
+6. 用例结果表中对应 `TC-E2E-*` 标 **blocked**（非 pass/skip），并在「问题与建议」记录阻塞原因
 
 ## 任务清单
 
@@ -89,7 +93,7 @@
 
 `{{output_path}}`
 
-报告须含用例结果表。产出写入后，编排会在文末写入 `## Workflow 状态`（含 `test_passed`）并结束本节点。
+**禁止**只写一份「概述 + 用例结果表」就结束。必须按下面章节写完整报告；缺章节时本节点不算完成。写完后编排会在文末追加 `## Workflow 状态`（含 `test_passed`）。
 
 ## 执行要求
 
@@ -97,9 +101,19 @@
 2. **单元测试**：新增/补全测试类，运行项目测试命令，记录用例编号 ↔ 测试方法 ↔ 结果
 3. **API 测试**：断言与用例预期一致（状态码、关键字段、错误场景）
 4. **E2E**：按上文配置开关执行或 skip；MCP 不可用时 **blocked 并询问用户**，禁止 CLI 回退
-5. 输出 **测试报告**，包含：单元/API/E2E 各小节、执行命令、问题与建议，以及一张用例结果表
+5. 将完整测试报告写入 `{{output_path}}`（结构见下一节）
 
-用例结果表格式：
+## 测试报告必须包含的章节
+
+按下列顺序写，不要合并成几句结论：
+
+1. **执行环境与命令**：业务工程根、实际执行的命令、Surefire / 测试框架输出摘要（如 `Tests run / Failures / Errors / Skipped`、`BUILD SUCCESS`）
+2. **用例追溯表**：`用例编号 | 优先级(如有) | 测试类#方法 | 结果`，覆盖全部 `TC-UNIT-*` / `TC-API-*` / `TC-E2E-*`，方法名必须真实存在
+3. **单元测试**：按测试类分小节，写清覆盖点与结果，不要只写「全部通过」
+4. **API 测试**：按用例写关键断言（状态码、关键字段、错误码），不要只写「契约均通过」
+5. **E2E / 浏览器**：每个 `TC-E2E-*` 写步骤与断言；`pass` 的用例必须在本小节用 `![...](e2e-screenshots/xxx.png)` 嵌入截图。截图只放 `{{docs_dir}}/e2e-screenshots/`，禁止与 `05-test-report.md` 同级
+6. **问题与建议**：没有问题也要写「无阻塞问题」，并列出非阻塞项或后续建议
+7. **用例结果表**（正文最后一张表，供编排写入 `test_passed`）：
 
 ```markdown
 | 用例编号 | 结果 |
@@ -109,6 +123,4 @@
 | TC-E2E-01 | skip |
 ```
 
-结果列只允许 `pass` / `skip` / `fail` / `blocked`。编排据此写入文末 Workflow 状态表的 `test_passed`；收尾打印与续跑都只读那张状态表。全部为 `pass` 或 `skip` 则 `test_passed: true`；任一行 `fail` / `blocked` 则为 `false`。
-
-将测试报告写入 `{{output_path}}`。
+结果列只允许 `pass` / `skip` / `fail` / `blocked`。全部为 `pass` 或 `skip` 则状态表 `test_passed: true`；任一行 `fail` / `blocked` 则为 `false`。收尾打印与续跑只读文末 Workflow 状态表。

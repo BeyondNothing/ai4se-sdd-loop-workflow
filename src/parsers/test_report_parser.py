@@ -36,6 +36,46 @@ def has_test_result_table(content: str) -> bool:
     return last_result_table(content) is not None
 
 
+_VERIFY_SECTION_MARKERS = (
+    ("执行", ("执行命令", "执行环境", "执行概述")),
+    ("单元", ("单元测试", "单元")),
+    ("API", ("API 测试", "API")),
+    ("E2E", ("E2E", "浏览器")),
+    ("问题", ("问题与建议", "问题")),
+    ("追溯", ("测试方法", "用例追溯", "追溯")),
+)
+_IMAGE_LINK = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
+
+
+def verify_report_ready(content: str) -> bool:
+    """报告须有完整章节 + 用例结果表；截图链接只能指向 e2e-screenshots/。"""
+    body = _strip_workflow_status(content).strip()
+    if len(body) < 1800:
+        return False
+    if not has_test_result_table(body):
+        return False
+    for _name, aliases in _VERIFY_SECTION_MARKERS:
+        if not any(alias in body for alias in aliases):
+            return False
+    if not _e2e_screenshot_links_ok(body):
+        return False
+    return True
+
+
+def _e2e_screenshot_links_ok(body: str) -> bool:
+    links = [match.group(1).strip() for match in _IMAGE_LINK.finditer(body)]
+    e2e_ran = bool(re.search(r"TC-E2E-\S+\s*\|\s*(pass|fail|blocked)", body, re.I))
+    if e2e_ran and not links:
+        return False
+    for url in links:
+        normalized = url.replace("\\", "/").split("?", 1)[0]
+        if normalized.startswith("http://") or normalized.startswith("https://"):
+            continue
+        if "/e2e-screenshots/" not in f"/{normalized}":
+            return False
+    return True
+
+
 def last_result_table(content: str) -> list[list[str]] | None:
     tables = extract_markdown_tables(_strip_workflow_status(content))
     if not tables:
