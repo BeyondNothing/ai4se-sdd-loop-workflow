@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dev-workflow"
+name = "ai4se-sdd-loop-workflow"
 version = "0.1.0"
 description = "LangGraph workflow: requirement → plan → tasks → code → tests"
 readme = "README.md"

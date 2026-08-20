@@ -1,12 +1,121 @@
-# Dev Workflow — 工程设计文档
+# ai4se-sdd-loop-workflow
 
-从**原始需求**到**代码实现**再到**测试自验证**的工程化 Workflow 系统。
-
-LangGraph 负责编排（状态管理、节点调度、续跑路由）；每个节点是独立 agent，通过 YAML 配置指定 AI 工具与 prompt，产出以 Markdown 写入 **应用项目根** 下的 `docs/<需求名>/`（默认 `dev-workflow/` 的上级目录）。流程拓扑在 `src/workflow.py` 中固定定义，节点行为在 `config/workflow.yaml` 中配置。
+从**原始需求**到**代码实现**再到**测试自验证**的工程化 Workflow。把本仓库 clone 到**业务项目根目录**即可接入；默认把 `docs/`、`ai-rules/` 写在上一级业务工程里，不写进本仓库。
 
 ---
 
-## 1. 设计目标
+## 1. 接入与启动
+
+### 1.1 放到业务项目根目录
+
+在业务仓库根目录（与 `src/`、`pom.xml` / `package.json` 同级）clone 本仓库，目录名保持 `ai4se-sdd-loop-workflow`。默认 `config/workflow.yaml` 里 `app_root: ..`，即上一级就是业务项目根。
+
+```text
+your-project/                      # 业务项目根 = app_root
+├── src/
+├── pom.xml                        # 或其它工程文件
+├── docs/
+│   └── requirements/              # 需求输入（建议）
+├── ai-rules/                      # 可选，项目规范 markdown
+└── ai4se-sdd-loop-workflow/       # 本仓库（clone 到这里）
+    ├── start.sh
+    ├── start.cmd
+    └── config/
+```
+
+macOS / Linux：
+
+```bash
+cd /path/to/your-project
+git clone <本仓库 Git 地址> ai4se-sdd-loop-workflow
+cd ai4se-sdd-loop-workflow
+```
+
+Windows（cmd / PowerShell）：
+
+```bat
+cd \path\to\your-project
+git clone <本仓库 Git 地址> ai4se-sdd-loop-workflow
+cd ai4se-sdd-loop-workflow
+```
+
+不要改目录名，也不要把本仓库 clone 到业务工程外面再改 `app_root`，除非你明确要那样部署。
+
+### 1.2 配置
+
+在 **`ai4se-sdd-loop-workflow/`** 内：
+
+1. 复制扩展规则（此文件按项目改，不提交本仓库）：
+
+```bash
+cp config/ai-rules.example.yaml config/ai-rules.yaml
+```
+
+```bat
+copy config\ai-rules.example.yaml config\ai-rules.yaml
+```
+
+按业务规范改 `config/ai-rules.yaml` 中的文件列表；规则正文放在业务根的 `ai-rules/`（例如 `your-project/ai-rules/ddd-design-standard.md`）。
+
+2. 按环境改 `config/workflow.yaml`（一般只需 E2E）：
+
+```yaml
+workflow:
+  app_root: ..              # 保持 ..，指向业务项目根
+  docs_dir: docs
+  e2e:
+    enabled: true
+    headless: false
+    base_url: http://localhost:8080
+```
+
+3. 把需求文件放到业务根 `docs/requirements/`，例如 `your-project/docs/requirements/my-feature.md`。启动时 `--file` 路径相对本仓库根，因此是 `../docs/requirements/my-feature.md`。
+
+前置：Python 3.10+（Windows 用 `python` 或 `py -3`）、Node 18+（E2E / Playwright MCP；macOS 可用 nvm，Windows 可用 nvm-windows）。交互节点需要本机已登录的 Cursor / Claude / omp CLI。
+
+### 1.3 启动命令
+
+在 **`ai4se-sdd-loop-workflow/`** 目录执行。脚本会创建 `.venv`、安装依赖并调用 `run.py`。
+
+| 系统 | 入口 | 说明 |
+|------|------|------|
+| macOS / Linux | `./start.sh` | bash |
+| Windows | `.\start.cmd` | **推荐**。UTF-8 + `ExecutionPolicy Bypass` 调用 `start.ps1` |
+| Windows | `.\start.ps1` | 若被策略拦截，改用 `start.cmd` |
+
+```bash
+# macOS / Linux — 首次（Cursor，指定需求名）
+./start.sh --name my-feature --file ../docs/requirements/my-feature.md
+
+# 调试编排（不调真实 AI）
+./start.sh --tool echo --skip-clarification --file ../docs/requirements/my-feature.md --name my-feature
+
+# omp
+./start.sh --tool omp --skip-clarification --name my-feature --file ../docs/requirements/my-feature.md
+
+# 续跑（不要加 --fresh）
+./start.sh --skip-clarification --name my-feature
+
+# 已装过依赖
+./start.sh --skip-install --name my-feature
+```
+
+```bat
+REM Windows — 在 ai4se-sdd-loop-workflow 目录
+.\start.cmd --name my-feature --file ..\docs\requirements\my-feature.md
+.\start.cmd --tool echo --skip-clarification --file ..\docs\requirements\my-feature.md --name my-feature
+.\start.cmd --tool omp --skip-clarification --name my-feature --file ..\docs\requirements\my-feature.md
+.\start.cmd --skip-clarification --name my-feature
+.\start.cmd --skip-install --name my-feature
+```
+
+`--tool`：`cursor`（也可看 `workflow.yaml` 默认值）、`claude_code`、`oh_my_pi` / `omp`、`echo`。更多选项：`./start.sh --help` 或 `.\start.cmd --help`。
+
+启动脚本会按需同步 Playwright MCP。`e2e.enabled: false` 时跳过 MCP 同步，E2E 在报告中标 skip。Windows 使用 `scripts/playwright-mcp.cmd`。若浏览器 MCP 未生效，重新跑启动脚本后**重启 IDE / omp 会话**。
+
+---
+
+## 2. 设计目标
 
 | 目标 | 说明 |
 |------|------|
@@ -19,25 +128,25 @@ LangGraph 负责编排（状态管理、节点调度、续跑路由）；每个�
 
 ---
 
-## 2. 设计原则
+## 3. 设计原则
 
-### 2.1 LangGraph 只做编排
+### 3.1 LangGraph 只做编排
 
 - **状态管理** — 在节点间传递 `requirement`、`resume_from_node`、`test_passed` 等
 - **节点调度** — 按固定图执行；阶段门禁（approval / content ready）决定是否进入下一节点
-- **续跑路由** — 启动时读 `docs/` 已有产出，决定 `resume_from_node`（见 §4.3）
+- **续跑路由** — 启动时读 `docs/` 已有产出，决定 `resume_from_node`（见 §5.3）
 
 节点具体行为（prompt、工具、读写哪些 doc）由 `NodeRunner` + YAML 驱动。
 
-### 2.2 节点即独立 Agent
+### 3.2 节点即独立 Agent
 
 1. 加载 `prompts/` 模板，注入 `{{ai_rules}}`、doc、state 变量
 2. 调用节点配置的 AI 工具（`cursor` / `claude_code` / `oh_my_pi` / `echo`）
-3. 将产出写入 **应用项目根** `docs/<需求名>/`（非 `dev-workflow/` 内）
+3. 将产出写入 **应用项目根** `docs/<需求名>/`（非本仓库内）
 
 **不共享 AI 会话**；上游信息仅通过 Markdown 与 state 字段传递。
 
-### 2.3 流程固定，配置分离
+### 3.3 流程固定，配置分离
 
 | 层级 | 位置 | 内容 |
 |------|------|------|
@@ -47,11 +156,11 @@ LangGraph 负责编排（状态管理、节点调度、续跑路由）；每个�
 | 规则内容 | `<app_root>/ai-rules/` | 规则 markdown 文件 |
 | 续跑逻辑 | `src/router.py` | 读 docs 决定启动节点 |
 
-### 2.4 Workflow 级配置
+### 3.4 Workflow 级配置
 
 ```yaml
 workflow:
-  app_root: ..              # 应用项目根（相对 dev-workflow/）
+  app_root: ..              # 应用项目根（相对本仓库根）
   docs_dir: docs            # 产出: <app_root>/docs/<需求名>/
   e2e:
     enabled: true          # false 时跳过浏览器 E2E
@@ -72,7 +181,7 @@ workflow:
 
 ---
 
-## 3. 整体架构
+## 4. 整体架构
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -90,17 +199,17 @@ workflow:
 └─────────────────────────────────────────────────────────┘
 ```
 
-业务代码、docs 产出与 **ai-rules** 均在 **应用项目根**（`workflow.app_root`）。`dev-workflow/` 仅保留编排配置与 prompts。
+业务代码、docs 产出与 **ai-rules** 均在 **应用项目根**（`workflow.app_root`）。本仓库仅保留编排配置与 prompts。
 
 ---
 
-## 4. Workflow 流程
+## 5. Workflow 流程
 
-### 4.1 流程图
+### 5.1 流程图
 
 ```mermaid
 flowchart TD
-    START([./start.sh]) --> ROUTE[route_next<br/>读 docs 定 resume_from_node]
+    START([start.sh / start.cmd]) --> ROUTE[route_next<br/>读 docs 定 resume_from_node]
     ROUTE --> A[analyze_requirements<br/>interactive]
     ROUTE --> P[parallel_plan_and_tests<br/>headless 并行]
     ROUTE --> R[review_plan_and_tests<br/>interactive]
@@ -124,7 +233,7 @@ flowchart TD
     V --> DONE([END<br/>05-test-report.md])
 ```
 
-### 4.2 节点一览
+### 5.2 节点一览
 
 | 节点 ID | 名称 | 模式 | 产出 | 说明 |
 |---------|------|------|------|------|
@@ -137,11 +246,11 @@ flowchart TD
 
 YAML 中还定义 `create_plan`、`design_test_cases` 两个 headless 子节点配置，由 `parallel_plan_and_tests` 内部调用，不单独出现在图上。
 
-**interactive**：继承终端，用户与 Agent 对话；产出写入后 workflow 结束当前 CLI 会话，需再次 `./start.sh` 续跑下一阶段（或由单次 run 连续跑完所有已就绪门禁的节点——实际以 LangGraph 一次 invoke 为准，交互节点会在未过门禁时 END）。
+**interactive**：继承终端，用户与 Agent 对话；产出写入后 workflow 结束当前 CLI 会话，需再次启动脚本续跑下一阶段（或由单次 run 连续跑完所有已就绪门禁的节点——实际以 LangGraph 一次 invoke 为准，交互节点会在未过门禁时 END）。
 
 **headless**：`agent -p` 非交互执行，写完整 md 到磁盘。
 
-### 4.3 续跑与 CLI 选项
+### 5.3 续跑与 CLI 选项
 
 启动时 `determine_start_node()`（`src/router.py`）扫描 `docs/<name>/`：
 
@@ -158,18 +267,16 @@ YAML 中还定义 `create_plan`、`design_test_cases` 两个 headless 子节点�
 | `--tool echo` | 调试编排，不调真实 AI |
 | `--skip-mcp-setup` | 跳过 Playwright MCP 配置 |
 
-```bash
-# 首次运行（需求文件在应用根 docs/requirements/）
-./start.sh --name product-list-toc --file ../docs/requirements/product-list-toc-requirement.md
+平台入口、配置与启动示例见 **§1**。续跑常用：
 
-# 续跑（不要加 --fresh）；已有 docs/<name>/ 时可只传 --name
-./start.sh --skip-clarification --name product-list-toc
+```bash
+# macOS / Linux
+./start.sh --name product-list-toc --file ../docs/requirements/product-list-toc-requirement.md
+./start.sh --skip-clarification --name product-list-toc   # 续跑，不要加 --fresh
 ```
 
-Windows（PowerShell / cmd，推荐 `start.cmd` 以免 ExecutionPolicy 拦截）：
-
 ```bat
-cd dev-workflow
+REM Windows（在本仓库根目录；推荐 start.cmd）
 .\start.cmd --name product-list-toc --file ..\docs\requirements\product-list-toc-requirement.md
 .\start.cmd --skip-clarification --name product-list-toc
 ```
@@ -178,9 +285,9 @@ cd dev-workflow
 
 ---
 
-## 5. 测试设计
+## 6. 测试设计
 
-### 5.1 分工
+### 6.1 分工
 
 | 阶段 | 单元 `TC-UNIT-*` | API `TC-API-*` | E2E `TC-E2E-*` |
 |------|------------------|----------------|----------------|
@@ -195,15 +302,15 @@ cd dev-workflow
 - **框架**：必须使用业务工程已有测试栈（JUnit、MockMvc、`src/test`、Maven/Gradle），禁止自建独立测试工程
 - **E2E**：仅 `verify_tests` prompt 描述；**必须**使用 Playwright MCP（`config/mcp/servers.json`）；截图**只**写入 `docs/<req>/e2e-screenshots/`（独立目录，禁止与 `05-test-report.md` 同级）。**禁止** agent 在 MCP 失败时改用 Playwright CLI / 自建脚本；须告知用户 MCP 不可用并等待用户决策
 
-### 5.2 开发阶段不涉及 E2E
+### 6.2 开发阶段不涉及 E2E
 
 计划、任务、实现、review 等 prompt **不描述** E2E 执行细节；E2E 配置与 MCP 说明仅在 `prompts/05_verify_tests.md`。
 
 ---
 
-## 6. 扩展规则（ai-rules）
+## 7. 扩展规则（ai-rules）
 
-### 6.1 配置（本地，不提交）
+### 7.1 配置（本地，不提交）
 
 与 `workflow.yaml` 同级，复制示例后按项目修改：
 
@@ -230,16 +337,16 @@ nodes:
 
 未配置 `ai-rules.yaml` 时，各节点 `{{ai_rules}}` 为空提示，workflow 仍可运行。
 
-### 6.2 规则文件
+### 7.2 规则文件
 
-`NodeRunner` 从 `<app_root>/<ai_rules_dir>/` 读取上述文件，拼入 prompt 的 `{{ai_rules}}`。规则内容归属应用项目，不放在 `dev-workflow/` 内。
+`NodeRunner` 从 `<app_root>/<ai_rules_dir>/` 读取上述文件，拼入 prompt 的 `{{ai_rules}}`。规则内容归属应用项目，不放在本仓库内。
 
 ---
 
-## 7. 产出文档链
+## 8. 产出文档链
 
 ```text
-<app_root>/                          # 应用项目（默认 = dev-workflow/..）
+<app_root>/                          # 应用项目（默认 = 本仓库的上级目录）
 ├── src/main/ ...                    # 业务代码
 ├── pom.xml
 ├── docs/
@@ -281,7 +388,7 @@ status: pending    # pending | approved — 仅 approved 且内容就绪后进�
 
 ---
 
-## 8. 节点配置三要素
+## 9. 节点配置三要素
 
 ```yaml
 analyze_requirements:
@@ -298,7 +405,7 @@ analyze_requirements:
 
 节点 `extend_rules` 在 `config/ai-rules.yaml` 中配置，不在 `workflow.yaml`。
 
-### 8.1 AI 工具
+### 9.1 AI 工具
 
 | 工具 | headless | interactive |
 |------|----------|-------------|
@@ -315,7 +422,7 @@ analyze_requirements:
 
 注册：`src/agents/registry.py`。
 
-### 8.2 Prompt 变量
+### 9.2 Prompt 变量
 
 - **state**：`{{requirement}}`、`{{project_root}}`、`{{requirement_type}}` …
 - **doc**：`{{doc_01-requirements.md}}` — 读取当前需求目录下对应文件（仅该节点 `inputs` 里列出的 doc 会注入）
@@ -324,7 +431,7 @@ analyze_requirements:
 
 ---
 
-## 9. 状态管理
+## 10. 状态管理
 
 `src/state.py` 中 `DevWorkflowState` 主要字段：
 
@@ -341,10 +448,10 @@ analyze_requirements:
 
 ---
 
-## 10. 目录结构
+## 11. 目录结构
 
 ```text
-dev-workflow/
+ai4se-sdd-loop-workflow/            # 本仓库根
 ├── README.md
 ├── start.sh                    # macOS / Linux 入口（venv + run.py）
 ├── start.ps1 / start.cmd       # Windows 入口（cmd 包装 PowerShell）
@@ -364,7 +471,7 @@ dev-workflow/
 └── src/
 ```
 
-应用项目根（默认 `dev-workflow/..`）：
+应用项目根（默认本仓库的上级目录）：
 
 ```text
 <app_root>/
@@ -375,59 +482,7 @@ dev-workflow/
 └── src/main/ ...
 ```
 
-`dev-workflow/` 内**不再**包含 `docs/` 或 `ai-rules/`（均在应用项目根）。
-
----
-
-## 11. 快速开始
-
-### 安装与启动
-
-```bash
-cd dev-workflow
-cp config/ai-rules.example.yaml config/ai-rules.yaml   # 首次使用
-./start.sh --help
-
-# 调试编排（echo，跳过澄清）
-./start.sh --tool echo --skip-clarification --file ../docs/requirements/jwt-login-requirement.md
-
-# 正式跑（Cursor + 指定需求名）
-./start.sh --name jwt-login --file ../docs/requirements/jwt-login-requirement.md
-```
-
-Windows：
-
-```bat
-cd dev-workflow
-copy config\ai-rules.example.yaml config\ai-rules.yaml
-.\start.cmd --help
-.\start.cmd --tool echo --skip-clarification --file ..\docs\requirements\jwt-login-requirement.md
-.\start.cmd --name jwt-login --file ..\docs\requirements\jwt-login-requirement.md
-```
-
-需已安装 Python 3.10+（`python` / `py -3`）和 Node 18+（或 nvm-windows）。交互节点依赖本机已登录的 Cursor / Claude / omp CLI。
-
-### 常用命令
-
-```bash
-# 仅安装依赖
-pip install -e .
-
-# 直接调用 run.py
-python run.py --file ../docs/requirements/product-list-toc-requirement.md --name product-list-toc
-
-# LangGraph Dev
-pip install langgraph-cli langgraph-api
-langgraph dev   # 图 ID: dev_workflow
-```
-
-### MCP / E2E
-
-- Node 18+；`start.sh` 会尝试 nvm 切换版本，Windows `start.ps1` 会尝试 nvm-windows
-- E2E 开启时自动同步 MCP 到 Cursor / Claude / Codex / **Oh My Pi**（`.omp/mcp.json` + `.omp/config.yml`），除非 `--skip-mcp-setup` 或 `e2e.enabled: false`；Windows 同步 Playwright wrapper 为 `scripts/playwright-mcp.cmd`
-- Playwright MCP 使用 `@playwright/mcp@0.0.79` + `--browser chrome`（优先系统 Google Chrome）；`workflow.e2e.headless: false`（默认）时不传 `--headless`，E2E 会弹出 Chrome 窗口；设为 `true` 则后台 headless 运行
-- **勿用** `--browser chromium`（旧配置会触发 `chrome-for-testing` revision 不匹配）；若 Cursor/omp 报 browser 未安装，重新 `./start.sh` 同步 MCP 后**重启 IDE/omp 会话**使 MCP 配置生效
-- 页面 path 由实现代码/报告确认；host/端口来自 `workflow.e2e.base_url`
+本仓库内**不再**包含业务 `docs/` 或 `ai-rules/`（均在应用项目根）。目录关系与 clone 方式见 **§1**。
 
 ---
 
@@ -464,14 +519,3 @@ langgraph dev   # 图 ID: dev_workflow
 | `typing-extensions` | TypedDict |
 
 不依赖 LangChain / OpenAI SDK；AI 能力由 Cursor CLI、Claude Code CLI 等外部工具提供。
-
----
-
-## 14. 与业务仓库的关系
-
-| 路径 | 内容 |
-|------|------|
-| `dev-workflow/` | LangGraph 编排、YAML 配置、prompts |
-| `<app_root>/` | 业务代码、`ai-rules/`、`docs/` |
-
-`workflow.app_root` 可在 `config/workflow.yaml` 中改为绝对路径或其它相对路径。

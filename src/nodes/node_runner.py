@@ -447,7 +447,7 @@ class NodeRunner:
         return resolve_docs_path(app_root, docs_dir)
 
     def _agent_cwd(self, node_id: str) -> Path:
-        """实现/测试节点在应用项目根执行；其余在 dev-workflow。"""
+        """实现/测试节点在应用项目根执行；其余在本仓库（编排引擎）根目录。"""
         if node_id in _CODE_WORK_NODES:
             return self.app_root
         return self.project_root

@@ -1,6 +1,6 @@
 workflow:
   docs_dir: docs
-  app_root: ..          # 应用项目根（相对 dev-workflow/）
+  app_root: ..          # 应用项目根（相对本仓库根目录）
   e2e:
     enabled: true   # false 时跳过浏览器 E2E（verify_tests 仍执行单元/API 测试）
     headless: false # false=有界面（默认弹出 Chrome）；true=无界面 headless

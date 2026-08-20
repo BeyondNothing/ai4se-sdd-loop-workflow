@@ -1,4 +1,4 @@
-﻿# start.ps1 — 创建虚拟环境、安装依赖并启动 workflow（Windows）
+﻿# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow（Windows）
 # 本文件须以 UTF-8 BOM 保存，Windows PowerShell 5.1 才能正确解析中文。
 $ErrorActionPreference = "Stop"
 try {
@@ -233,7 +233,7 @@ if (-not (Test-Path -LiteralPath $VenvPython)) {
 if (-not $SkipInstall) {
     Write-Host "==> 升级 pip"
     & $VenvPython -m pip install --upgrade pip | Out-Null
-    Write-Host "==> 安装 dev-workflow（editable，含 langgraph 等依赖）"
+    Write-Host "==> 安装 ai4se-sdd-loop-workflow（editable，含 langgraph 等依赖）"
     & $VenvPython -m pip install -e .
     if ($LASTEXITCODE -ne 0) { Die "pip install -e . 失败" }
 } else {

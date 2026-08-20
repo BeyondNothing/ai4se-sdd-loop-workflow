@@ -1,4 +1,4 @@
-# Oh My Pi workflow overlay — 由 dev-workflow 启动 omp 时自动注入（--config）。
+# Oh My Pi workflow overlay — 由本仓库启动 omp 时自动注入（--config）。
 #
 # omp 默认 browser.enabled=true 时会启用内置 browser 工具，并 filterBrowserMCPServers()
 # 过滤掉 playwright 等浏览器 MCP（与 Cursor 行为不同）。E2E 规范要求 Playwright MCP，

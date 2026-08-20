@@ -57,7 +57,7 @@ def resolve_app_root(workflow_root: Path, app_root: str | None = None) -> Path:
     """
     应用项目根目录（业务代码与 docs 产出所在仓库根）。
 
-    workflow_root: dev-workflow/ 目录
+    workflow_root: 编排仓库根目录（本仓库）
     app_root: 配置值，相对 workflow_root 或绝对路径；默认 ``..``（上级目录）
     """
     workflow_root = workflow_root.resolve()

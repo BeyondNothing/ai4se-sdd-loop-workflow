@@ -216,7 +216,7 @@ class OhMyPiTool(AITool):
 
     @staticmethod
     def _omp_search_roots(base: Path) -> list[Path]:
-        """cwd、一层子目录、再向上，不依赖编排目录叫 dev-workflow。"""
+        """cwd、一层子目录、再向上，不依赖编排目录的固定名字。"""
         roots: list[Path] = [base]
         if base.is_dir():
             for child in sorted(base.iterdir()):

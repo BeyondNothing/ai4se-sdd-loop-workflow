@@ -14,9 +14,9 @@
 
 ## 工程结构（动手前先了解）
 
-本 workflow 编排引擎位于 `{{project_root}}`（`dev-workflow/`）。**业务代码与 docs 产出**在应用项目根 `{{app_root}}`；测试前请查看该目录结构，对照任务清单与实现报告，在业务工程中运行测试命令。
+本 workflow 编排引擎位于 `{{project_root}}`（仓库 `ai4se-sdd-loop-workflow`）。**业务代码与 docs 产出**在应用项目根 `{{app_root}}`；测试前请查看该目录结构，对照任务清单与实现报告，在业务工程中运行测试命令。
 
-- **不要**在 `dev-workflow/` 内查找业务代码或写入 docs 产出
+- **不要**在编排仓库 `{{project_root}}` 内查找业务代码或写入 docs 产出
 - 测试命令（如 `mvn test`）应在实际模块/服务目录或 monorepo 根目录执行，以仓库既有构建方式为准
 
 ## 测试用例（**执行依据**）

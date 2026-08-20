@@ -21,9 +21,9 @@
 
 ## 工程结构（动手前先了解）
 
-本 workflow 编排引擎位于 `{{project_root}}`（`dev-workflow/`）。**业务代码与 docs 产出**在应用项目根 `{{app_root}}`。编码前请查看该目录结构（如 `src/main`、`pom.xml` 等），再创建或修改代码。
+本 workflow 编排引擎位于 `{{project_root}}`（仓库 `ai4se-sdd-loop-workflow`）。**业务代码与 docs 产出**在应用项目根 `{{app_root}}`。编码前请查看该目录结构（如 `src/main`、`pom.xml` 等），再创建或修改代码。
 
-- **不要**把业务代码或 docs 写到 `dev-workflow/` 内
+- **不要**把业务代码或 docs 写到编排仓库 `{{project_root}}` 内
 - **遵循**仓库已有的模块/服务目录约定，不要臆造路径
 - 若从目录结构仍无法确定落点，在会话中向用户确认后再动手
 

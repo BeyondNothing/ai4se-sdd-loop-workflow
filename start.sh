@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# start.sh — 创建虚拟环境、安装依赖并启动 dev-workflow
+# start.sh — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,7 +29,7 @@ usage() {
 
 示例:
   # 调试：不调真实 AI，只跑通编排
-  # 产出在 <应用根>/docs/<name>/（非 dev-workflow 内）
+  # 产出在 <应用根>/docs/<name>/（非本仓库内）
   ./start.sh --tool echo --skip-clarification --file ../docs/requirements/jwt-login-requirement.md --name jwt-login
 
   # 指定需求目录名
@@ -220,7 +220,7 @@ source "$VENV_DIR/bin/activate"
 if [[ "$SKIP_INSTALL" -eq 0 ]]; then
   echo "==> 升级 pip"
   python -m pip install --upgrade pip >/dev/null
-  echo "==> 安装 dev-workflow（editable，含 langgraph 等依赖）"
+  echo "==> 安装 ai4se-sdd-loop-workflow（editable，含 langgraph 等依赖）"
   pip install -e .
 else
   echo "==> 跳过依赖安装 (--skip-install)"
