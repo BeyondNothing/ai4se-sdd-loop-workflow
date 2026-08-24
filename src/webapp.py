@@ -129,6 +129,7 @@ class WebState:
         self.bindings: dict[str, ProjectBinding] = {}
         self.tasks_by_project: dict[str, list[dict[str, Any]]] = {}
         self.runs: dict[str, WorkflowRun] = {}
+        self.project_run_locks: dict[str, threading.Lock] = {}
         self.lock = threading.Lock()
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -372,6 +373,15 @@ class WebState:
             run.updated_at = datetime.now().isoformat(timespec="seconds")
             self.runs[run_id] = run
 
+    def get_project_run_lock(self, project_id: str) -> threading.Lock:
+        """Return a stable per-project lock for run serialization."""
+        with self.lock:
+            lock = self.project_run_locks.get(project_id)
+            if lock is None:
+                lock = threading.Lock()
+                self.project_run_locks[project_id] = lock
+            return lock
+
 
 class WebApp:
     def __init__(self, workflow_root: Path):
@@ -508,41 +518,49 @@ class WebApp:
         try:
             run = self.state.get_run(run_id)
             binding = self.state.get_binding(run.project_id)
-            self.state.update_run(run_id, status="running")
-            self.state.append_run_log(run_id, "Workflow started")
-
-            config_path = self._build_runtime_configs(run, binding)
-            wf_cfg = load_workflow_config(config_path)
-            if not run.skip_mcp_setup and wf_cfg.e2e_enabled:
-                mcp_result = ensure_mcp_for_agents(
-                    self.workflow_root,
-                    e2e_headless=wf_cfg.e2e_headless,
-                )
+            project_lock = self.state.get_project_run_lock(run.project_id)
+            if project_lock.locked():
                 self.state.append_run_log(
                     run_id,
-                    f"MCP configured: servers={mcp_result.get('servers', [])}",
+                    "Another run is active for this project, waiting for project lock",
                 )
 
-            workflow = DevWorkflow(self.workflow_root, config_path)
-            source_file = Path(run.requirement_path) if run.requirement_path else None
-            if source_file and not source_file.exists():
-                source_file = None
+            with project_lock:
+                self.state.update_run(run_id, status="running")
+                self.state.append_run_log(run_id, "Workflow started")
 
-            result = workflow.run(
-                requirement=run.requirement,
-                docs_dir=binding.docs_dir,
-                name=run.requirement_name or None,
-                source_file=source_file,
-                skip_clarification=run.skip_clarification,
-                fresh=run.fresh,
-            )
-            self.state.update_run(
-                run_id,
-                status="completed",
-                result=result,
-                ended_at=datetime.now().isoformat(timespec="seconds"),
-            )
-            self.state.append_run_log(run_id, "Workflow completed")
+                config_path = self._build_runtime_configs(run, binding)
+                wf_cfg = load_workflow_config(config_path)
+                if not run.skip_mcp_setup and wf_cfg.e2e_enabled:
+                    mcp_result = ensure_mcp_for_agents(
+                        self.workflow_root,
+                        e2e_headless=wf_cfg.e2e_headless,
+                    )
+                    self.state.append_run_log(
+                        run_id,
+                        f"MCP configured: servers={mcp_result.get('servers', [])}",
+                    )
+
+                workflow = DevWorkflow(self.workflow_root, config_path)
+                source_file = Path(run.requirement_path) if run.requirement_path else None
+                if source_file and not source_file.exists():
+                    source_file = None
+
+                result = workflow.run(
+                    requirement=run.requirement,
+                    docs_dir=binding.docs_dir,
+                    name=run.requirement_name or None,
+                    source_file=source_file,
+                    skip_clarification=run.skip_clarification,
+                    fresh=run.fresh,
+                )
+                self.state.update_run(
+                    run_id,
+                    status="completed",
+                    result=result,
+                    ended_at=datetime.now().isoformat(timespec="seconds"),
+                )
+                self.state.append_run_log(run_id, "Workflow completed")
         except Exception as exc:  # noqa: BLE001
             logger.exception("Workflow run failed")
             self.state.update_run(
