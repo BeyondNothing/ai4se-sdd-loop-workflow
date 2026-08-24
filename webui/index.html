@@ -1,0 +1,1151 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI4SE Workflow Workbench</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1220;
+      --surface: #0f172a;
+      --surface-2: #0c172b;
+      --border: #22304a;
+      --text: #dbe6f7;
+      --muted: #93a8c7;
+      --primary: #3b82f6;
+      --ok: #16a34a;
+      --warn: #ca8a04;
+      --bad: #dc2626;
+      --run: #0284c7;
+      --queued: #64748b;
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      color: var(--text);
+      background: radial-gradient(circle at top right, #12213d 0%, var(--bg) 38%);
+    }
+
+    .viewport {
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .layout {
+      height: 100%;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 260px 340px minmax(0, 1fr);
+      gap: 10px;
+      padding: 10px;
+    }
+
+    .layout.left-collapsed {
+      grid-template-columns: 56px 340px minmax(0, 1fr);
+    }
+
+    .col,
+    .workspace {
+      height: calc(100vh - 20px);
+      min-width: 0;
+    }
+
+    .col {
+      display: grid;
+      grid-template-rows: 1fr;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(15, 23, 42, 0.9);
+      padding: 10px;
+      min-width: 0;
+    }
+
+    .card-scroll {
+      height: 100%;
+      overflow: auto;
+    }
+
+    .title {
+      margin: 0 0 2px;
+      font-size: 16px;
+      color: #f8fbff;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #f8fbff;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      color: #f2f7ff;
+    }
+
+    label {
+      display: block;
+      margin: 6px 0 4px;
+      color: #c4d2eb;
+      font-size: 12px;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid #2a3b5c;
+      border-radius: 8px;
+      background: var(--surface-2);
+      color: #e7f0ff;
+      padding: 8px;
+      font-size: 12px;
+    }
+
+    textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    .section-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .btn {
+      border: 1px solid #35507a;
+      background: #11233a;
+      color: #d9e8ff;
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn:hover { border-color: #4d6ea1; }
+    .btn.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+    .btn.inline { padding: 6px 8px; }
+
+    .col-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .collapse-rail {
+      display: none;
+      height: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(15, 23, 42, 0.92);
+      align-items: center;
+      justify-content: center;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      font-size: 12px;
+      color: #b6c9ea;
+      gap: 8px;
+      padding: 8px 4px;
+    }
+
+    .collapse-rail button {
+      writing-mode: horizontal-tb;
+      border: 1px solid #35507a;
+      background: #11233a;
+      color: #d9e8ff;
+      border-radius: 6px;
+      padding: 4px 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .layout.left-collapsed #left-col .card { display: none; }
+    .layout.left-collapsed #left-rail { display: flex; }
+
+    .project-list,
+    .task-list {
+      max-height: calc(100vh - 220px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: grid;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .project-item,
+    .task-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      background: #0f1b31;
+      cursor: pointer;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .project-item.active,
+    .task-item.active {
+      border-color: #3b82f6;
+      background: #10213b;
+    }
+
+    .project-name,
+    .task-name {
+      font-weight: 600;
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .project-path {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      line-height: 1.35;
+    }
+
+    .task-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .task-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .task-actions button {
+      border: 1px solid #35507a;
+      background: #11233a;
+      color: #d9e8ff;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .rules-grid {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .rule-row {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      background: #0f1b31;
+    }
+
+    .rule-row label {
+      margin-top: 0;
+    }
+
+    .chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .chip {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      color: #f8fbff;
+    }
+
+    .chip.queued { background: var(--queued); }
+    .chip.running { background: var(--run); }
+    .chip.completed { background: var(--ok); }
+    .chip.failed { background: var(--bad); }
+    .chip.skipped { background: var(--warn); color: #111827; }
+
+    .status-stack {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      display: grid;
+      grid-template-rows: min-content minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .nodes {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-auto-rows: 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+      min-width: 0;
+    }
+
+    .node {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      background: #0f1b31;
+      height: 132px;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .node .name { font-weight: 600; font-size: 12px; }
+    .node .id { color: #7f95b7; font-size: 11px; margin-top: 2px; }
+    .node .status-line { margin-top: 6px; }
+    .node .artifact { margin-top: auto; font-size: 11px; min-height: 30px; display: flex; align-items: flex-end; }
+
+    .artifact-link {
+      border: none;
+      background: transparent;
+      color: #8cc1ff;
+      text-decoration: underline;
+      cursor: pointer;
+      padding: 0;
+      text-align: left;
+      word-break: break-all;
+      font-size: 11px;
+    }
+
+    #run-detail {
+      margin: 0;
+      max-height: 260px;
+      overflow: auto;
+      background: #071022;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .empty {
+      border: 1px dashed #35507a;
+      border-radius: 8px;
+      background: rgba(16, 28, 48, 0.6);
+      padding: 8px;
+    }
+
+    .modal-mask {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.74);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 10px;
+    }
+
+    .modal-mask.open { display: flex; }
+
+    .modal {
+      width: min(560px, 96vw);
+      max-height: 88vh;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0d1628;
+      padding: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="viewport">
+    <div class="layout" id="layout">
+      <aside class="col" id="left-col">
+        <section class="card card-scroll">
+          <div class="col-head">
+            <h1 class="title">项目</h1>
+            <button class="btn inline" onclick="toggleLeftColumn()">缩起</button>
+          </div>
+          <div class="muted">选择项目后可创建并管理任务</div>
+          <div class="section-actions">
+            <button class="btn primary" onclick="openProjectModal('create')">+ 新建项目</button>
+            <button class="btn" onclick="openProjectModal('edit')">编辑</button>
+            <button class="btn" onclick="deleteCurrentProject()">删除</button>
+            <button class="btn" onclick="openRulesModal()">规则</button>
+          </div>
+          <div id="project-list" class="project-list"></div>
+        </section>
+        <div id="left-rail" class="collapse-rail">
+          <button onclick="toggleLeftColumn()">展开</button>
+          项目列
+        </div>
+      </aside>
+
+      <section class="col" id="middle-col">
+        <article class="card card-scroll">
+          <h2>任务列表</h2>
+          <div id="project-title" class="muted">未选择项目</div>
+          <div class="section-actions">
+            <button class="btn primary" onclick="openTaskModal('create')">+ 新建任务</button>
+            <button class="btn" onclick="loadRuns()">刷新任务状态</button>
+          </div>
+          <div id="task-list" class="task-list"></div>
+        </article>
+      </section>
+
+      <main class="workspace" id="right-col">
+        <article class="card">
+          <div class="col-head">
+            <h2>任务工作台</h2>
+          </div>
+
+          <label>当前任务</label>
+          <input id="run-name" placeholder="请先在中间列创建并选择任务" />
+
+          <label>PRD 路径（可选，优先读取）</label>
+          <input id="run-prd-path" placeholder="可填写绝对路径或相对项目路径" />
+
+          <label>需求文本（当 PRD 路径为空时使用）</label>
+          <textarea id="run-requirement" placeholder="输入或粘贴需求内容..."></textarea>
+
+          <div class="section-actions">
+            <button class="btn" onclick="toggleFlag('headless')" id="flag-headless">全部节点无界面模式: 开</button>
+            <button class="btn" onclick="toggleFlag('skipClar')" id="flag-skipclar">跳过需求澄清: 开</button>
+            <button class="btn primary" onclick="startRun()">执行任务</button>
+          </div>
+          <div id="run-msg" class="muted" style="margin-top: 8px;"></div>
+          <div style="margin-top: 10px;">
+            <button class="btn" onclick="loadRuns()">刷新状态</button>
+          </div>
+        </article>
+
+        <div class="status-stack">
+          <article class="card">
+            <h2>节点状态概览</h2>
+            <div id="run-overview" class="chips"><span class="muted">尚未选择任务</span></div>
+          </article>
+
+          <article class="card" style="display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px;">
+            <div>
+              <h2 style="margin-bottom: 6px;">产物与执行详情</h2>
+              <div class="muted">右侧集中展示节点产物、状态与日志</div>
+            </div>
+            <div>
+              <div class="nodes" id="node-grid"></div>
+              <pre id="run-detail">选择任务后可查看日志与错误信息。</pre>
+            </div>
+          </article>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div id="task-modal-mask" class="modal-mask">
+    <div class="modal" style="width: min(460px, 96vw);">
+      <h3 id="task-modal-title">新建任务</h3>
+      <div class="muted">任务先在 UI 创建，再进入右侧工作台编辑执行内容。</div>
+      <label>任务名称</label>
+      <input id="task-name-input" placeholder="例如: 登录流程改造" />
+      <div class="section-actions" style="margin-top: 12px;">
+        <button class="btn primary" id="task-submit-btn" onclick="submitTaskForm()">创建任务</button>
+        <button class="btn" onclick="closeTaskModal()">取消</button>
+      </div>
+      <div id="task-msg" class="muted" style="margin-top: 6px;"></div>
+    </div>
+  </div>
+
+  <div id="project-modal-mask" class="modal-mask">
+    <div class="modal">
+      <h3 id="project-modal-title">新建项目</h3>
+      <label>项目名称</label>
+      <input id="bind-name" placeholder="my-project" />
+      <label>项目根目录（绝对路径）</label>
+      <input id="bind-path" placeholder="/path/to/project" />
+      <label>文档目录（相对路径）</label>
+      <input id="bind-docs" value="docs" />
+      <label>规则目录（相对路径）</label>
+      <input id="bind-rules-dir" value="ai-rules" />
+      <div class="section-actions" style="margin-top: 12px;">
+        <button class="btn primary" id="project-submit-btn" onclick="submitProjectForm()">创建并进入</button>
+        <button class="btn" onclick="closeProjectModal()">取消</button>
+      </div>
+      <div id="bind-msg" class="muted" style="margin-top: 6px;"></div>
+    </div>
+  </div>
+
+
+  <div id="rules-modal-mask" class="modal-mask">
+    <div class="modal">
+      <h3>规则配置</h3>
+      <div class="muted">项目级规则目录与节点规则文件映射</div>
+      <label>规则目录（相对项目路径或绝对路径）</label>
+      <input id="rules-dir-input" placeholder="ai-rules" />
+      <div class="section-actions">
+        <button class="btn" onclick="scanRuleFiles()">扫描文件</button>
+        <button class="btn primary" onclick="saveRulesConfig()">保存规则</button>
+        <button class="btn" onclick="closeRulesModal()">关闭</button>
+      </div>
+      <div id="rules-msg" class="muted" style="margin-top: 6px;"></div>
+      <div id="rules-grid" class="rules-grid"></div>
+    </div>
+  </div>
+
+  <script>
+    const NODE_IDS = ["requirements_analysis", "design", "tasks", "implementation", "test_cases", "test_execution", "review", "final_report"];
+    const NODE_TITLES = {
+      requirements_analysis: "需求分析",
+      design: "系统设计",
+      tasks: "任务拆分",
+      implementation: "代码实现",
+      test_cases: "测试用例",
+      test_execution: "执行测试",
+      review: "结果评审",
+      final_report: "最终报告",
+    };
+
+    const RULE_NODE_OPTIONS = [
+      { id: "analyze_requirements", label: "需求分析与澄清" },
+      { id: "create_plan", label: "制定计划" },
+      { id: "design_test_cases", label: "设计测试用例" },
+      { id: "review_plan_and_tests", label: "计划与用例评审" },
+      { id: "split_tasks", label: "任务拆分" },
+      { id: "implement_code", label: "代码实现" },
+      { id: "verify_tests", label: "测试自验证" },
+    ];
+
+    const state = {
+      projects: [],
+      runs: [],
+      selectedProjectId: "",
+      selectedRunId: "",
+      selectedRun: null,
+      selectedTaskId: "",
+      tasksByProject: {},
+      taskModalMode: "create",
+      editingTaskId: "",
+      projectModalMode: "create",
+      editingProjectId: "",
+      ruleFiles: [],
+      nodeRules: {},
+      ui: { leftCollapsed: false },
+      flags: { headless: true, skipClar: true },
+    };
+
+    const el = (id) => document.getElementById(id);
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    function selectedProject() {
+      return state.projects.find((p) => p.project_id === state.selectedProjectId) || null;
+    }
+
+    function selectedProjectTasks() {
+      return state.tasksByProject[state.selectedProjectId] || [];
+    }
+
+    function selectedProjectPath() {
+      return selectedProject()?.app_root || "";
+    }
+
+    function ensureProjectTaskBucket(projectId) {
+      if (projectId && !state.tasksByProject[projectId]) state.tasksByProject[projectId] = [];
+    }
+
+    async function loadProjectTasks(projectId) {
+      if (!projectId) return;
+      const data = await api(`/api/projects/${projectId}/tasks`);
+      state.tasksByProject[projectId] = data.tasks || [];
+    }
+
+    function toggleLeftColumn() {
+      state.ui.leftCollapsed = !state.ui.leftCollapsed;
+      el("layout").classList.toggle("left-collapsed", state.ui.leftCollapsed);
+    }
+
+    function renderProjectHeader() {
+      const project = selectedProject();
+      el("project-title").textContent = project ? `${project.name} · ${project.app_root}` : "未选择项目";
+    }
+
+    function renderProjects() {
+      const root = el("project-list");
+      root.innerHTML = "";
+      for (const project of state.projects) {
+        const item = document.createElement("div");
+        item.className = `project-item ${state.selectedProjectId === project.project_id ? "active" : ""}`;
+        item.innerHTML = `<div class="project-name">${project.name}</div><div class="muted project-path">${project.app_root}</div>`;
+        item.onclick = async () => {
+          state.selectedProjectId = project.project_id;
+          state.selectedRunId = "";
+          state.selectedTaskId = "";
+          state.selectedRun = null;
+          ensureProjectTaskBucket(project.project_id);
+          await loadProjectTasks(project.project_id);
+          renderProjects();
+          renderProjectHeader();
+          renderTaskList();
+          clearWorkbench();
+          await loadRuns();
+        };
+        root.appendChild(item);
+      }
+      if (!root.innerHTML) root.innerHTML = '<div class="empty"><div class="muted">暂无项目，先创建一个。</div></div>';
+    }
+
+    function clearWorkbench() {
+      el("run-name").value = "";
+      el("run-prd-path").value = "";
+      el("run-requirement").value = "";
+      renderNodeGrid(null);
+      renderRunOverview(null);
+      renderRunDetail(null);
+    }
+
+    async function syncTaskFromForm() {
+      if (!state.selectedProjectId || !state.selectedTaskId) return;
+      const tasks = selectedProjectTasks();
+      const idx = tasks.findIndex((t) => t.task_id === state.selectedTaskId);
+      if (idx < 0) return;
+      tasks[idx].task_name = el("run-name").value.trim() || tasks[idx].task_name;
+      tasks[idx].requirement_prd_path = el("run-prd-path").value;
+      tasks[idx].requirement_text = el("run-requirement").value;
+      tasks[idx].updated_at = new Date().toISOString();
+      await api(`/api/projects/${state.selectedProjectId}/tasks/${state.selectedTaskId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          task_name: tasks[idx].task_name,
+          requirement_prd_path: tasks[idx].requirement_prd_path,
+          requirement_text: tasks[idx].requirement_text,
+        }),
+      });
+      renderTaskList();
+    }
+
+    function selectTask(taskId) {
+      state.selectedTaskId = taskId;
+      const task = selectedProjectTasks().find((t) => t.task_id === taskId);
+      if (!task) return;
+      el("run-name").value = task.task_name || "";
+      el("run-prd-path").value = task.requirement_prd_path || "";
+      el("run-requirement").value = task.requirement_text || "";
+      renderTaskList();
+
+      const match = state.runs.find((r) => r.project_id === state.selectedProjectId && (r.requirement_name || "") === (task.task_name || ""));
+      if (match) {
+        state.selectedRunId = match.run_id;
+        state.selectedRun = match;
+        renderNodeGrid(match);
+        renderRunOverview(match);
+        renderRunDetail(match);
+      } else {
+        state.selectedRunId = "";
+        state.selectedRun = null;
+        renderNodeGrid(null);
+        renderRunOverview(null);
+        renderRunDetail(null);
+      }
+    }
+
+    function renderTaskList() {
+      const root = el("task-list");
+      root.innerHTML = "";
+      if (!state.selectedProjectId) {
+        root.innerHTML = '<div class="empty"><div class="muted">请先在左侧选择项目。</div></div>';
+        return;
+      }
+      for (const task of selectedProjectTasks()) {
+        const item = document.createElement("div");
+        item.className = `task-item ${state.selectedTaskId === task.task_id ? "active" : ""}`;
+        item.onclick = () => selectTask(task.task_id);
+        item.innerHTML = `
+          <div class="task-row">
+            <div class="task-name" title="${task.task_name}">${task.task_name || "未命名任务"}</div>
+            <div class="task-actions">
+              <button onclick="event.stopPropagation(); openTaskModal('edit', '${task.task_id}')">编辑</button>
+              <button onclick="event.stopPropagation(); deleteTask('${task.task_id}')">删除</button>
+            </div>
+          </div>
+          <div class="muted">创建于: ${new Date(task.created_at).toLocaleString()}</div>
+        `;
+        root.appendChild(item);
+      }
+      if (!root.innerHTML) root.innerHTML = '<div class="empty"><div class="muted">暂无任务，点击“新建任务”。</div></div>';
+    }
+
+    function openTaskModal(mode, taskId = "") {
+      if (!state.selectedProjectId) {
+        el("run-msg").textContent = "请先选择项目再创建任务";
+        return;
+      }
+      state.taskModalMode = mode;
+      state.editingTaskId = taskId;
+      el("task-msg").textContent = "";
+      if (mode === "edit") {
+        const task = selectedProjectTasks().find((t) => t.task_id === taskId);
+        el("task-modal-title").textContent = "编辑任务";
+        el("task-submit-btn").textContent = "保存修改";
+        el("task-name-input").value = task?.task_name || "";
+      } else {
+        el("task-modal-title").textContent = "新建任务";
+        el("task-submit-btn").textContent = "创建任务";
+        el("task-name-input").value = "";
+      }
+      el("task-modal-mask").classList.add("open");
+    }
+
+    function closeTaskModal() {
+      el("task-modal-mask").classList.remove("open");
+      el("task-msg").textContent = "";
+    }
+
+    async function submitTaskForm() {
+      const name = el("task-name-input").value.trim();
+      if (!name) {
+        el("task-msg").textContent = "请输入任务名称";
+        return;
+      }
+
+      let projectId = (state.selectedProjectId || "").trim();
+      if (!projectId) {
+        await loadProjects();
+        projectId = (state.selectedProjectId || "").trim();
+        if (!projectId) {
+          el("task-msg").textContent = "请先选择项目";
+          return;
+        }
+      }
+
+      // Selected project may become stale after backend restart; refresh once before creating.
+      if (!state.projects.some((p) => p.project_id === projectId)) {
+        await loadProjects();
+        projectId = (state.selectedProjectId || "").trim();
+        if (!projectId || !state.projects.some((p) => p.project_id === projectId)) {
+          el("task-msg").textContent = "项目已失效，请重新选择项目后重试";
+          return;
+        }
+      }
+
+      ensureProjectTaskBucket(projectId);
+      const tasks = selectedProjectTasks();
+      try {
+        if (state.taskModalMode === "edit" && state.editingTaskId) {
+          const idx = tasks.findIndex((t) => t.task_id === state.editingTaskId);
+          if (idx >= 0) {
+            await api(`/api/projects/${projectId}/tasks/${state.editingTaskId}`, {
+              method: "PUT",
+              body: JSON.stringify({ task_name: name }),
+            });
+            tasks[idx] = { ...tasks[idx], task_name: name, updated_at: new Date().toISOString() };
+            if (state.selectedTaskId === state.editingTaskId) el("run-name").value = name;
+          }
+        } else {
+          const created = await api(`/api/projects/${projectId}/tasks`, {
+            method: "POST",
+            body: JSON.stringify({
+              task_name: name,
+              requirement_prd_path: "",
+              requirement_text: "",
+            }),
+          });
+          const task = created.task;
+          tasks.unshift(task);
+          state.selectedTaskId = task.task_id;
+          el("run-name").value = task.task_name;
+          el("run-prd-path").value = "";
+          el("run-requirement").value = "";
+        }
+        state.tasksByProject[projectId] = tasks;
+        renderTaskList();
+        closeTaskModal();
+      } catch (err) {
+        const msg = String(err || "");
+        if (msg.includes("Not found")) {
+          el("task-msg").textContent = "后端任务接口未就绪，请重启 UI 服务后重试";
+          return;
+        }
+        el("task-msg").textContent = msg;
+      }
+    }
+
+    async function deleteTask(taskId) {
+      if (!window.confirm("确认删除该任务吗？")) return;
+      const projectId = state.selectedProjectId;
+      await api(`/api/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" });
+      state.tasksByProject[projectId] = selectedProjectTasks().filter((t) => t.task_id !== taskId);
+      if (state.selectedTaskId === taskId) {
+        state.selectedTaskId = "";
+        clearWorkbench();
+      }
+      renderTaskList();
+    }
+
+    function openProjectModal(mode) {
+      state.projectModalMode = mode;
+      const project = selectedProject();
+      if (mode === "edit" && project) {
+        state.editingProjectId = project.project_id;
+        el("project-modal-title").textContent = "编辑项目";
+        el("project-submit-btn").textContent = "保存修改";
+        el("bind-name").value = project.name;
+        el("bind-path").value = project.app_root;
+        el("bind-docs").value = project.docs_dir;
+        el("bind-rules-dir").value = project.ai_rules_dir;
+      } else {
+        state.editingProjectId = "";
+        el("project-modal-title").textContent = "新建项目";
+        el("project-submit-btn").textContent = "创建并进入";
+        el("bind-name").value = "";
+        el("bind-path").value = "";
+        el("bind-docs").value = "docs";
+        el("bind-rules-dir").value = "ai-rules";
+      }
+      el("bind-msg").textContent = "";
+      el("project-modal-mask").classList.add("open");
+    }
+
+    function closeProjectModal() {
+      el("project-modal-mask").classList.remove("open");
+      el("bind-msg").textContent = "";
+    }
+
+
+    function closeRulesModal() {
+      el("rules-modal-mask").classList.remove("open");
+      el("rules-msg").textContent = "";
+    }
+
+    async function loadRulesData() {
+      if (!state.selectedProjectId) return;
+      const data = await api(`/api/projects/${state.selectedProjectId}/rules`);
+      state.nodeRules = data.node_rules || {};
+      el("rules-dir-input").value = data.ai_rules_dir || "ai-rules";
+      await scanRuleFiles(false);
+      renderRulesGrid();
+    }
+
+    async function openRulesModal() {
+      if (!state.selectedProjectId) {
+        el("run-msg").textContent = "请先选择项目再配置规则";
+        return;
+      }
+      await loadRulesData();
+      el("rules-modal-mask").classList.add("open");
+    }
+
+    async function scanRuleFiles(showHint = true) {
+      if (!state.selectedProjectId) return;
+      const dir = (el("rules-dir-input").value || "").trim() || "ai-rules";
+      const q = encodeURIComponent(dir);
+      const data = await api(`/api/projects/${state.selectedProjectId}/rule-files?ai_rules_dir=${q}`);
+      state.ruleFiles = data.files || [];
+      renderRulesGrid();
+      if (showHint) el("rules-msg").textContent = `已扫描 ${state.ruleFiles.length} 个 .md 文件`;
+    }
+
+    function renderRulesGrid() {
+      const root = el("rules-grid");
+      root.innerHTML = "";
+      for (const node of RULE_NODE_OPTIONS) {
+        const row = document.createElement("div");
+        row.className = "rule-row";
+        const selected = state.nodeRules[node.id] || [];
+        const options = state.ruleFiles
+          .map((f) => `<option value="${f}" ${selected.includes(f) ? "selected" : ""}>${f}</option>`)
+          .join("");
+        row.innerHTML = `
+          <label>${node.label} (${node.id})</label>
+          <select id="rule-${node.id}" multiple size="6">${options}</select>
+        `;
+        root.appendChild(row);
+      }
+    }
+
+    async function saveRulesConfig() {
+      if (!state.selectedProjectId) return;
+      const node_rules = {};
+      for (const node of RULE_NODE_OPTIONS) {
+        const select = el(`rule-${node.id}`);
+        const files = Array.from(select?.selectedOptions || []).map((o) => o.value).filter(Boolean);
+        node_rules[node.id] = files;
+      }
+      const payload = {
+        ai_rules_dir: (el("rules-dir-input").value || "").trim() || "ai-rules",
+        node_rules,
+      };
+      await api(`/api/projects/${state.selectedProjectId}/rules`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      el("rules-msg").textContent = "规则已保存";
+    }
+
+    async function submitProjectForm() {
+      const payload = {
+        name: el("bind-name").value,
+        app_root: el("bind-path").value,
+        docs_dir: el("bind-docs").value || "docs",
+        ai_rules_dir: el("bind-rules-dir").value || "ai-rules",
+      };
+      try {
+        let data;
+        if (state.projectModalMode === "edit" && state.editingProjectId) {
+          data = await api(`/api/projects/${state.editingProjectId}`, { method: "PUT", body: JSON.stringify(payload) });
+          state.selectedProjectId = data.project.project_id;
+        } else {
+          data = await api("/api/projects", { method: "POST", body: JSON.stringify(payload) });
+          state.selectedProjectId = data.project.project_id;
+          ensureProjectTaskBucket(state.selectedProjectId);
+        }
+        closeProjectModal();
+        await loadProjects();
+        await loadProjectTasks(state.selectedProjectId);
+        renderTaskList();
+      } catch (err) {
+        el("bind-msg").textContent = String(err);
+      }
+    }
+
+    async function deleteCurrentProject() {
+      const project = selectedProject();
+      if (!project) return;
+      if (!window.confirm(`确认删除项目 ${project.name} 吗？`)) return;
+      await api(`/api/projects/${project.project_id}`, { method: "DELETE" });
+      delete state.tasksByProject[project.project_id];
+      state.selectedProjectId = "";
+      state.selectedRunId = "";
+      state.selectedTaskId = "";
+      state.selectedRun = null;
+      await loadProjects();
+    }
+
+    function statusChip(status) {
+      const safe = ["queued", "running", "completed", "failed", "skipped"].includes(status) ? status : "queued";
+      return `<span class="chip ${safe}">${safe}</span>`;
+    }
+
+    function deriveNodeStatuses(run) {
+      const result = run?.result || {};
+      const outputs = result.node_outputs || {};
+      const completed = new Set(result.completed_nodes || []);
+      const currentNode = result.current_node || "";
+      return NODE_IDS.map((nodeId) => {
+        let status = "queued";
+        if (run?.status === "completed") {
+          status = outputs[nodeId] || completed.has(nodeId) ? "completed" : "skipped";
+        } else if (run?.status === "failed") {
+          if (outputs[nodeId] || completed.has(nodeId)) status = "completed";
+          else if (currentNode === nodeId) status = "failed";
+        } else if (run?.status === "running") {
+          if (outputs[nodeId] || completed.has(nodeId)) status = "completed";
+          else if (currentNode === nodeId) status = "running";
+        }
+        return { nodeId, title: NODE_TITLES[nodeId], status, artifact: outputs[nodeId] || "等待产物" };
+      });
+    }
+
+    function renderNodeGrid(run) {
+      const grid = el("node-grid");
+      grid.innerHTML = "";
+      for (const node of deriveNodeStatuses(run)) {
+        const hasArtifact = node.artifact && node.artifact !== "等待产物";
+        const artifactHtml = hasArtifact
+          ? `<button class="artifact-link" onclick="openArtifact('${node.nodeId}')">${node.artifact}</button>`
+          : '<span class="muted">等待产物</span>';
+        const card = document.createElement("div");
+        card.className = "node";
+        card.innerHTML = `<div class="name">${node.title}</div><div class="id">${node.nodeId}</div><div class="status-line">${statusChip(node.status)}</div><div class="artifact">${artifactHtml}</div>`;
+        grid.appendChild(card);
+      }
+    }
+
+    function renderRunOverview(run) {
+      const box = el("run-overview");
+      box.innerHTML = "";
+      if (!run) {
+        box.innerHTML = '<span class="muted">尚未选择任务</span>';
+        return;
+      }
+      const nodes = deriveNodeStatuses(run);
+      const completed = nodes.filter((n) => n.status === "completed").length;
+      const failed = nodes.filter((n) => n.status === "failed").length;
+      const running = nodes.filter((n) => n.status === "running").length;
+      box.innerHTML = `<span class="chip completed">completed ${completed}</span><span class="chip running">running ${running}</span><span class="chip failed">failed ${failed}</span>`;
+    }
+
+    function renderRunDetail(run) {
+      if (!run) {
+        el("run-detail").textContent = "选择任务后可查看日志与错误信息。";
+        return;
+      }
+      const logs = (run.logs || []).slice(-15).join("\n") || "(无日志)";
+      const err = run.error ? `\n\n[error]\n${run.error}` : "";
+      const meta = [
+        `run_id: ${run.run_id}`,
+        `status: ${run.status}`,
+        `tool: ${run.tool}`,
+        `requirement_name: ${run.requirement_name || ""}`,
+        `requirement_path: ${run.requirement_path || ""}`,
+        `docs_dir: ${run.docs_dir || ""}`,
+      ].join("\n");
+      el("run-detail").textContent = `${meta}\n\n[logs]\n${logs}${err}`;
+    }
+
+    function toggleFlag(flag) {
+      state.flags[flag] = !state.flags[flag];
+      el("flag-headless").textContent = `全部节点无界面模式: ${state.flags.headless ? "开" : "关"}`;
+      el("flag-skipclar").textContent = `跳过需求澄清: ${state.flags.skipClar ? "开" : "关"}`;
+    }
+
+    async function openArtifact(nodeId) {
+      if (!state.selectedRunId) return;
+      try {
+        const data = await api(`/api/runs/${state.selectedRunId}/open-artifact`, {
+          method: "POST",
+          body: JSON.stringify({ node_id: nodeId }),
+        });
+        el("run-msg").textContent = `已打开目录: ${data.opened}`;
+      } catch (err) {
+        el("run-msg").textContent = String(err);
+      }
+    }
+
+    async function startRun() {
+      if (!state.selectedProjectId) {
+        el("run-msg").textContent = "请先在左侧选择项目";
+        return;
+      }
+      if (!state.selectedTaskId) {
+        el("run-msg").textContent = "请先在中间列新建并选择任务";
+        return;
+      }
+      await syncTaskFromForm();
+      const requirement = el("run-requirement").value.trim();
+      const requirementPrdPath = el("run-prd-path").value.trim();
+      if (!requirement && !requirementPrdPath) {
+        el("run-msg").textContent = "请填写需求文本或 PRD 路径";
+        return;
+      }
+      try {
+        const payload = {
+          project_id: state.selectedProjectId,
+          requirement_name: el("run-name").value,
+          requirement,
+          requirement_prd_path: requirementPrdPath,
+          tool: "omp",
+          skip_clarification: state.flags.skipClar,
+          headless_all_nodes: state.flags.headless,
+          fresh: false,
+          skip_mcp_setup: false,
+        };
+        const data = await api("/api/runs", { method: "POST", body: JSON.stringify(payload) });
+        state.selectedRunId = data.run.run_id;
+        el("run-msg").textContent = `已启动任务: ${data.run.run_id}`;
+        await loadRuns();
+      } catch (err) {
+        el("run-msg").textContent = String(err);
+      }
+    }
+
+    async function loadRunDetail(runId) {
+      const data = await api(`/api/runs/${runId}`);
+      state.selectedRun = data.run || null;
+      renderNodeGrid(state.selectedRun);
+      renderRunOverview(state.selectedRun);
+      renderRunDetail(state.selectedRun);
+    }
+
+    async function loadRuns() {
+      try {
+        const data = await api("/api/runs");
+        state.runs = data.runs || [];
+        const projectRuns = state.runs.filter((r) => r.project_id === state.selectedProjectId);
+        if (state.selectedRunId) {
+          const selected = projectRuns.find((r) => r.run_id === state.selectedRunId);
+          if (selected) {
+            await loadRunDetail(selected.run_id);
+            return;
+          }
+        }
+        if (state.selectedTaskId) {
+          const taskName = el("run-name").value.trim();
+          const matched = projectRuns.find((r) => (r.requirement_name || "") === taskName);
+          if (matched) {
+            state.selectedRunId = matched.run_id;
+            await loadRunDetail(matched.run_id);
+            return;
+          }
+        }
+        state.selectedRun = null;
+        renderNodeGrid(null);
+        renderRunOverview(null);
+        renderRunDetail(null);
+      } catch (err) {
+        el("run-msg").textContent = String(err);
+      }
+    }
+
+    async function loadProjects() {
+      try {
+        const data = await api("/api/projects");
+        state.projects = data.projects || [];
+        if (!state.selectedProjectId && state.projects.length) {
+          state.selectedProjectId = state.projects[0].project_id;
+        }
+        if (state.selectedProjectId && !state.projects.some((p) => p.project_id === state.selectedProjectId)) {
+          state.selectedProjectId = state.projects[0]?.project_id || "";
+        }
+        if (state.selectedProjectId) {
+          ensureProjectTaskBucket(state.selectedProjectId);
+          await loadProjectTasks(state.selectedProjectId);
+        }
+        renderProjects();
+        renderProjectHeader();
+        renderTaskList();
+      } catch (err) {
+        el("run-msg").textContent = String(err);
+      }
+    }
+
+    async function init() {
+      renderNodeGrid(null);
+      await loadProjects();
+      await loadRuns();
+      setInterval(loadRuns, 7000);
+    }
+
+    init();
+  </script>
+</body>
+</html>
