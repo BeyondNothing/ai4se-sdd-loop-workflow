@@ -48,6 +48,44 @@ die() {
   exit 1
 }
 
+venv_python() {
+  if [[ -x "$VENV_DIR/bin/python" ]]; then
+    echo "$VENV_DIR/bin/python"
+  elif [[ -x "$VENV_DIR/Scripts/python.exe" ]]; then
+    echo "$VENV_DIR/Scripts/python.exe"
+  else
+    echo ""
+  fi
+}
+
+venv_is_healthy() {
+  local py
+  py="$(venv_python)"
+  [[ -n "$py" ]] || return 1
+  # activate 缺失或 pip 不可用都视为损坏（常见于中断创建的半成品 .venv）
+  if [[ ! -f "$VENV_DIR/bin/activate" && ! -f "$VENV_DIR/Scripts/activate.bat" ]]; then
+    return 1
+  fi
+  "$py" -m pip --version >/dev/null 2>&1
+}
+
+ensure_venv() {
+  if venv_is_healthy; then
+    echo "==> 复用虚拟环境: $VENV_DIR"
+    return 0
+  fi
+
+  if [[ -e "$VENV_DIR" ]]; then
+    echo "==> 虚拟环境不完整，重建: $VENV_DIR"
+    rm -rf "$VENV_DIR"
+  else
+    echo "==> 创建虚拟环境: $VENV_DIR"
+  fi
+
+  "$PYTHON_BIN" -m venv "$VENV_DIR" || die "创建虚拟环境失败: $VENV_DIR"
+  venv_is_healthy || die "虚拟环境创建后仍不可用（缺少 activate/pip），请检查 Python 是否带 ensurepip"
+}
+
 MIN_NODE_MAJOR=18
 
 node_major_version() {
@@ -207,21 +245,15 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "未找到 $PYTHON_BIN，请先�
 PY_VERSION="$("$PYTHON_BIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
 echo "==> Python: $PYTHON_BIN ($PY_VERSION)"
 
-if [[ ! -d "$VENV_DIR" ]]; then
-  echo "==> 创建虚拟环境: $VENV_DIR"
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
-else
-  echo "==> 复用虚拟环境: $VENV_DIR"
-fi
-
-# shellcheck disable=SC1091
-source "$VENV_DIR/bin/activate"
+ensure_venv
+VENV_PY="$(venv_python)"
+[[ -n "$VENV_PY" ]] || die "未找到虚拟环境 Python"
 
 if [[ "$SKIP_INSTALL" -eq 0 ]]; then
   echo "==> 升级 pip"
-  python -m pip install --upgrade pip >/dev/null
+  "$VENV_PY" -m pip install --upgrade pip >/dev/null
   echo "==> 安装 ai4se-sdd-loop-workflow（editable，含 langgraph 等依赖）"
-  pip install -e .
+  "$VENV_PY" -m pip install -e . || die "pip install -e . 失败"
 else
   echo "==> 跳过依赖安装 (--skip-install)"
 fi
@@ -269,7 +301,7 @@ ensure_node_for_playwright
 ensure_playwright_browsers
 
 echo "==> 启动 workflow"
-echo "    python run.py ${RUN_ARGS[*]}"
+echo "    $VENV_PY run.py ${RUN_ARGS[*]}"
 echo
 
-exec python run.py "${RUN_ARGS[@]}"
+exec "$VENV_PY" run.py "${RUN_ARGS[@]}"

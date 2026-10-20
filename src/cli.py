@@ -43,8 +43,25 @@ def skill_template_path(engine: Path) -> Path:
     return path
 
 
+ENGINE_DIR_NAME = "ai4se-sdd-loop-workflow"
+
+
 def _is_engine(path: Path) -> bool:
     return (path / "start.sh").is_file() and (path / "config" / "workflow.yaml").is_file()
+
+
+def _pick_engine_among(candidates: list[Path]) -> Path | None:
+    """从候选目录里选出唯一引擎；同名优先；多个无名冲突则报错。"""
+    engines = [p.resolve() for p in candidates if p.is_dir() and _is_engine(p)]
+    if not engines:
+        return None
+    if len(engines) == 1:
+        return engines[0]
+    preferred = [p for p in engines if p.name == ENGINE_DIR_NAME]
+    if len(preferred) == 1:
+        return preferred[0]
+    listed = "\n".join(f"  - {p}" for p in engines)
+    raise SystemExit(f"错误: 多个引擎目录，请用 --workflow-root:\n{listed}")
 
 
 def find_engine_root(explicit: Path | None) -> Path:
@@ -54,6 +71,7 @@ def find_engine_root(explicit: Path | None) -> Path:
             raise SystemExit(f"错误: 不是 workflow 引擎目录: {engine}")
         return engine
 
+    # editable / 源码运行：__file__ 就在引擎仓库内
     source = _engine_root()
     if _is_engine(source):
         return source
@@ -62,21 +80,33 @@ def find_engine_root(explicit: Path | None) -> Path:
     if _is_engine(cwd):
         return cwd
 
-    children = [p for p in cwd.iterdir() if p.is_dir() and _is_engine(p)]
-    if len(children) == 1:
-        return children[0].resolve()
-    preferred = [p for p in children if p.name == "ai4se-sdd-loop-workflow"]
-    if len(preferred) == 1:
-        return preferred[0].resolve()
-    if len(children) > 1:
-        listed = "\n".join(f"  - {p}" for p in children)
-        raise SystemExit(f"错误: 多个引擎目录，请用 --workflow-root:\n{listed}")
+    # 业务项目根下嵌套 clone：<app>/ai4se-sdd-loop-workflow/
+    found = _pick_engine_among(list(cwd.iterdir()))
+    if found:
+        return found
 
-    for parent in cwd.parents:
-        if _is_engine(parent):
-            return parent.resolve()
+    # 与业务项目同级：<parent>/ai4se-sdd-loop-workflow/
+    parent = cwd.parent
+    sibling = parent / ENGINE_DIR_NAME
+    if _is_engine(sibling):
+        return sibling.resolve()
+    found = _pick_engine_among(list(parent.iterdir()) if parent.is_dir() else [])
+    if found:
+        return found
 
-    raise SystemExit("错误: 找不到 workflow 引擎，请传入 --workflow-root。")
+    for ancestor in cwd.parents:
+        if _is_engine(ancestor):
+            return ancestor.resolve()
+        named = ancestor / ENGINE_DIR_NAME
+        if _is_engine(named):
+            return named.resolve()
+
+    raise SystemExit(
+        "错误: 找不到 workflow 引擎，请传入 --workflow-root。\n"
+        f"  例如: sdd-loop-workflow:init --workflow-root /path/to/{ENGINE_DIR_NAME}\n"
+        "  提示: 若用 pip 非 editable 安装，代码在 site-packages，不会自动带上引擎仓库；"
+        "请把引擎 clone 到业务项目内/同级，或显式指定路径。"
+    )
 
 
 def resolve_app_root(engine: Path, explicit: Path | None) -> Path:

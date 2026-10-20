@@ -218,16 +218,42 @@ $Python = Resolve-PythonCommand
 $pyVersion = & $Python.File @($Python.Prefix + @("-c", "import sys; print('%d.%d' % sys.version_info[:2])"))
 Write-Host "==> Python: $($Python.File) ($pyVersion)"
 
-if (-not (Test-Path -LiteralPath $VenvDir)) {
-    Write-Host "==> 创建虚拟环境: $VenvDir"
-    Invoke-Python $Python @("-m", "venv", $VenvDir)
-} else {
+function Test-VenvHealthy([string]$Dir) {
+    $py = Join-Path $Dir "Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $py)) {
+        $py = Join-Path $Dir "bin\python"
+    }
+    if (-not (Test-Path -LiteralPath $py)) { return $false }
+    $activate = Join-Path $Dir "Scripts\Activate.ps1"
+    if (-not (Test-Path -LiteralPath $activate)) {
+        $activate = Join-Path $Dir "bin\activate"
+    }
+    if (-not (Test-Path -LiteralPath $activate)) { return $false }
+    & $py -m pip --version 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
+if (Test-VenvHealthy $VenvDir) {
     Write-Host "==> 复用虚拟环境: $VenvDir"
+} else {
+    if (Test-Path -LiteralPath $VenvDir) {
+        Write-Host "==> 虚拟环境不完整，重建: $VenvDir"
+        Remove-Item -LiteralPath $VenvDir -Recurse -Force
+    } else {
+        Write-Host "==> 创建虚拟环境: $VenvDir"
+    }
+    Invoke-Python $Python @("-m", "venv", $VenvDir)
+    if (-not (Test-VenvHealthy $VenvDir)) {
+        Die "虚拟环境创建后仍不可用（缺少 activate/pip），请检查 Python 是否带 ensurepip"
+    }
 }
 
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $VenvPython)) {
-    Die "虚拟环境不完整，未找到 $VenvPython"
+    $VenvPython = Join-Path $VenvDir "bin\python"
+}
+if (-not (Test-Path -LiteralPath $VenvPython)) {
+    Die "虚拟环境不完整，未找到 python"
 }
 
 if (-not $SkipInstall) {
