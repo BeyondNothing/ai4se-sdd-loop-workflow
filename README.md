@@ -96,7 +96,49 @@ your-project/
 
 ---
 
-## 4. 业务配置说明（`sdd-loop-workflow-config/`）
+## 4. 断点续接
+
+产出落在 `<docs_dir>/<name>/`（如 `spec/login/`）。每次启动会扫描该目录已有 md 与文末 **Workflow 状态**表，从**未完成的下一节点**接着跑，不会无故从头再来。
+
+### 怎么续
+
+| 情况 | 做法 |
+|------|------|
+| 编排进程还在跑（终端未退出） | 在对话里完成澄清/审批即可，**进程会自动进下一节点**；不要再执行一遍 `start` |
+| 进程已退出 / 中断 / 换机器 | 用**同一个** `--name` 再执行 `start`（可带原 `--file`）；**不要**加 `--fresh` |
+| 整条链路已完成（存在完成态的 `06-ai-review.md`） | 再 `start` 会直接判定已完成；要推倒重来才加 `--fresh`（会清空该需求下除原始需求外的 md 产出） |
+
+```bash
+# 续跑（推荐始终带上 --name，与首次一致）
+sdd-loop-workflow:start --tool cursor --name login
+
+# 仅当明确要清空该需求产出、从头再来
+sdd-loop-workflow:start --tool cursor --file "/path/to/prd.md" --name login --fresh
+```
+
+### 依据什么定位断点
+
+启动时按「流程越靠后的产出优先」检查，并结合状态表里的 `next_node`、门禁是否通过（内容就绪 + 需审批节点已 `approved`）决定入口，例如：
+
+| 已有关键产出（示意） | 通常从哪继续 |
+|----------------------|--------------|
+| 仅有需求草稿 / 需求未批完 | `analyze_requirements` |
+| `01-requirements` 已完成，计划/用例未齐 | 并行生成或 `review_plan_and_tests` |
+| `02-plan-test-review` 已批 | `split_tasks` |
+| `03-tasks` 已批 | `implement_code` |
+| `04-implementation` 已有 | `verify_tests` |
+| `05-test-report` 已有 | `ai_review` |
+| `06-ai-review` 已 completed 且无下一节点 | 整单结束，无需续跑 |
+
+要点：
+
+- **同名续跑靠 `--name`**（或已有 `spec/<name>/00-requirement.md`）；换 name 等于另一条需求线。
+- **`--fresh` 与续跑互斥**；误加会清掉该需求下已有阶段文档。
+- 交互节点在外部终端跑着时，审批后由**同一进程**续跑；用 skill 时不要为「接着跑」再拼一次启动命令。
+
+---
+
+## 5. 业务配置说明（`sdd-loop-workflow-config/`）
 
 `init` 生成后改这里即可按项目定制，**不必改引擎**。
 
