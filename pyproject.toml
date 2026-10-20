@@ -15,6 +15,11 @@ dependencies = [
     "python-dotenv>=1.0.0",
 ]
 
+[project.scripts]
+sdd-loop-workflow = "src.cli:main"
+"sdd-loop-workflow:init" = "src.cli:main"
+"sdd-loop-workflow:start" = "src.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
