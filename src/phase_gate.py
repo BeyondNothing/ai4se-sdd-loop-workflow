@@ -129,7 +129,8 @@ def _checklist_ready(content: str, state: DevWorkflowState) -> bool:
 
 def _validate_requirements_final(content: str) -> bool:
     metadata = parse_requirement_metadata(content)
-    return bool(metadata.requirement_type and metadata.requirement_type != "unknown")
+    # 仅接受规范化后的 new | existing_change（见 requirement_parser 别名表）
+    return metadata.requirement_type in ("new", "existing_change")
 
 
 def _validate_generic_final(content: str, cfg: PhaseConfig) -> bool:
@@ -190,6 +191,9 @@ def phase_complete(docs_dir: Path, node_id: str, state: DevWorkflowState) -> boo
     cfg = PHASE_CONFIGS.get(node_id)
     if cfg and not cfg.requires_approval:
         return True
+    # --auto：内容就绪即过门禁，不等人写 approved
+    if state.get("auto"):
+        return True
     return phase_user_approved(docs_dir, node_id)
 
 
@@ -203,6 +207,8 @@ def review_plan_tests_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
     """Review 节点完成：review 定稿确认，且 plan / test-cases 均已同步并确认。"""
     if not phase_complete(docs_dir, "review_plan_and_tests", state):
         return False
+    if state.get("auto"):
+        return True
     return phase_user_approved(docs_dir, "create_plan") and phase_user_approved(
         docs_dir, "design_test_cases"
     )

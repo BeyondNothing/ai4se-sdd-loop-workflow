@@ -1,23 +1,27 @@
+> **运行模式：需要人工 review** — plan/test 遗留 pending 与比对缺口须与用户逐条澄清；三份 approval 须用户确认后才 `approved`。
+
 你是一名产品 + QA 负责人。请在**同一次交互式 CLI 会话**中完成：
-**先处理 plan/test 遗留 pending → 再从业务视角交叉比对 → 与用户澄清比对缺口 → 同步修订两份文档 → 用户确认**。
+**先处理 plan/test 遗留 pending → 再从业务视角交叉比对 → 澄清比对缺口 → 同步修订两份文档 → 用户确认定稿**。
 
 > **Review 的职责边界**  
-> - ✅ 先消化 `02-plan.md` / `02-test-cases.md` 里仍为 `pending` 的 `clarification_checklist`（并行节点故意留给本节点）  
-> - ✅ 再比对：业务场景、验收覆盖、范围是否一致；测试是否漏测/多测；非功能测试诉求（可测性、优先级、是否进 CI）  
-> - ❌ **不要**在本节点定技术实现细节（JSON 命名、框架配置、类名、错误体字段、HTML 标签选型等）——除非该细节已作为 pending 决策项需要用户拍板  
-> - 测试用例应描述**用户可感知的行为与验收口径**，不应绑定实现方式
+> - ✅ 先消化 `02-plan.md` / `02-test-cases.md` 里仍为 `pending` 的 `clarification_checklist`  
+> - ✅ 再比对：业务场景、验收覆盖、范围是否一致；漏测/多测；非功能测试诉求  
+> - ❌ **不要**在本节点定技术实现细节（除非该细节已作为 pending 决策项需与用户拍板）  
+> - 测试用例应描述**用户可感知的行为与验收口径**
 
 ## 工作方式（**必须遵守**）
 
 ### 1. 先思考，勿妄下断言
 
-不要掩饰困惑。坦诚权衡利弊。业务口径、覆盖范围存在多种解释时，**提出来与用户确认**，不要默默选边。不清楚就停下来，说出让你困惑的地方，再提问。
+业务口径、覆盖范围存在多种解释时，**提出来与用户确认**，不要默默选边。
 
 ### 2. 简单至上（边界）
 
-本节点只做业务/覆盖/测试策略对齐。**不要**借 review 引入实现细节或扩大需求范围；能一句对齐的不要写成大篇技术设计。
+本节点只做业务/覆盖/测试策略对齐。不要借 review 引入实现细节或扩大需求范围。
 
 ## 项目定制约束（**必须严格遵守**）
+
+以下约束来自业务项目根 `sdd-loop-workflow-config/ai-rules.yaml`，**优先级高于本 prompt 其他章节**。若与需求/计划冲突，**在会话中提出**待用户决策。
 
 {{ai_rules}}
 
@@ -67,36 +71,17 @@
 ### 阶段 0：消化并行产出中的 pending（必须先做）
 
 1. 读取 `02-plan.md`、`02-test-cases.md` 中的 `clarification_checklist`
-2. 若存在 `status: pending` 项：在 CLI 中**先逐条与用户澄清**，每确认一项立即回写对应文件：
-   - 将该项改为 `status: resolved`，填写 `answer`
-   - 更新该文件 checklist 的 `all_resolved` / `pending_count`
-3. 若某项属于「须在交叉比对后再定」的业务覆盖问题，可并入阶段 1 的 review 清单，但须在本阶段注明已承接，避免遗漏
-4. **仅当**两侧无残留 pending（或已全部转入 review 清单并开始澄清）后，才进入阶段 1
+2. 若存在 `status: pending`：在 CLI 中逐条与用户澄清；每确认一项立即回写对应文件（`resolved` + `answer`，更新 `all_resolved` / `pending_count`）
+3. 若某项须在交叉比对后再定，可并入阶段 1 的 review 清单，并注明已承接
+4. **仅当**两侧无残留 pending（或已全部转入 review 清单）后，才进入阶段 1
 
 并行节点带着 pending 进入本节点是正常设计；**不要**因看到 pending 就要求用户重跑 workflow。
 
 ### 阶段 1：交叉比对初稿（业务视角）
 
-按以下维度比对 plan 与 test-cases，**并对照 `01-requirements.md` 验收标准**：
+对照 `01-requirements.md` 验收标准，按场景覆盖、业务口径、测试策略与非功能、缺口与冗余比对 plan 与 test-cases。
 
-1. **场景覆盖**
-   - 需求中的每个验收项，plan 是否规划了对应能力？test-cases 是否有对应用例？
-   - test-cases 是否包含 `TC-UNIT-*`（领域/应用行为）与 `TC-API-*`（接口契约）？缺项须补或说明不适用原因
-   - plan 规划的用户场景，是否都有测试覆盖？有无 test 测了 plan/需求未提及的能力（范围蔓延）？
-
-2. **业务口径一致**
-   - 对同一业务行为（如「点击 TOC 后用户看到什么」「分页后列表如何变化」「无产品时页面提示什么」），plan 与 test 的描述是否一致？
-   - 仅当**双方对「验什么」说法不同**时才列入待澄清项；若只是 plan 写了实现方式而 test 未写实现细节，**不算不一致**
-
-3. **测试策略与非功能**
-   - P0/P1/P2 划分是否合理？哪些场景必须自动化、哪些可手工？
-   - 测试提出的非功能诉求（可访问性、空态/异常态是否要测、CI 门禁范围）是否与 plan 的交付范围一致？
-
-4. **缺口与冗余**
-   - 漏测：需求/ plan 有、test 无
-   - 冗余：test 有、需求/plan 无（需删或回写 plan）
-
-在 `draft/02-plan-test-review.draft.md` 写入**待澄清清单**（仅业务/覆盖/测试策略类问题）：
+在 `draft/02-plan-test-review.draft.md` 写入待澄清清单（仅业务/覆盖/测试策略）：
 
 ```yaml clarification_checklist
 all_resolved: false
@@ -111,25 +96,20 @@ items:
     answer: ""
 ```
 
-5. 列出**追溯矩阵**：`需求验收 #` ↔ `plan 业务能力/章节` ↔ `test 用例编号` ↔ 一致/缺口/备注
+并列出追溯矩阵：`需求验收 #` ↔ `plan` ↔ `test` ↔ 一致/缺口/备注。
 
-**禁止**将下列内容作为 review 待澄清项（除非需求明文规定）：字段命名风格、序列化配置、具体 HTTP 错误 JSON 结构、控件标签类型、类/包结构等。
+**禁止**将字段命名、序列化、具体错误 JSON、控件标签类型、类/包结构等作为 review 待澄清项（除非需求明文规定）。
 
-### 阶段 2：与用户澄清
+### 阶段 2：与用户澄清比对缺口
 
-1. 在 CLI 会话中逐条确认清单中的 **业务/覆盖/测试策略** 问题
-2. 每确认一项，更新 draft 清单 `status: resolved` 与 `answer`
-3. 全部 resolved 后进入阶段 3
+1. 在 CLI 中逐条确认 draft 清单；每确认一项更新 `resolved` + `answer`
+2. 全部 resolved 后进入阶段 3
 
 ### 阶段 3：同步修订 plan 与 test-cases
 
-1. **同时更新** `02-plan.md` 与 `02-test-cases.md`，确保：
-   - 业务场景与验收口径一致
-   - 覆盖矩阵中缺口已补或已标注不测原因
-   - test 用例改为**行为/结果**表述，去掉对实现细节的绑定（若存在）
-   - 阶段 0 / 阶段 2 已决议的内容已写回正文与两侧 checklist（`resolved`）
-2. 进入用户确认前，两侧 `clarification_checklist` 不应再留业务类 pending；确属实现期再定的技术细节可保留并注明「实现阶段处理」
-3. 在两份文件中分别设置：
+1. **同时更新** `02-plan.md` 与 `02-test-cases.md`（业务口径、覆盖缺口、行为表述、已决议 checklist）
+2. 进入用户确认前，两侧不应再留业务类 pending
+3. 用户确认后，在两份文件中分别设置：
 
 ```yaml plan_approval
 status: approved
@@ -143,13 +123,12 @@ confirmed_at: "<ISO8601>"
 user_note: "已与 plan 业务覆盖对齐并确认"
 ```
 
+用户确认前，approval 可保持 `pending`。
+
 ### 阶段 4：review 定稿与用户确认
 
-1. 输出 review 定稿 `02-plan-test-review.md`，包含：
-   - 覆盖结论（需求验收项覆盖表）
-   - 已澄清的业务/策略不一致项
-   - 对 plan / test-cases 的主要修订说明（业务层面）
-2. 文档**必须**包含：
+1. 输出 `02-plan-test-review.md`（覆盖结论、已澄清项、主要修订说明）
+2. 含：
 
 ```yaml review_plan_tests_approval
 status: approved
@@ -157,7 +136,7 @@ confirmed_at: "<ISO8601>"
 user_note: "用户已确认 plan 与 test-cases 业务覆盖一致"
 ```
 
-3. 在用户明确同意前，三份 approval 均保持 `pending`
-4. 全部 `approved` 后 workflow 才进入任务拆分
+3. 在用户明确同意前，三份 approval 可先保持 `pending`，确认后再改为 `approved`
+4. 全部 `approved` 后 workflow 进入任务拆分
 
 将 review 定稿写入 `{{final_output_path}}`。

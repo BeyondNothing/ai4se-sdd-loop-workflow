@@ -1,4 +1,4 @@
-﻿# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow（Windows）
+# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow（Windows）
 # 本文件须以 UTF-8 BOM 保存，Windows PowerShell 5.1 才能正确解析中文。
 $ErrorActionPreference = "Stop"
 try {
@@ -31,6 +31,7 @@ function Show-Usage {
   -t, --tool TOOL     覆盖 AI 工具: cursor | claude_code | oh_my_pi | omp | echo
   -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
+  --auto                无人值守：禁止向用户提问，内容就绪后自动过门禁
   --fresh               清除已有产出（保留 00-requirement.md）后重来
   --skip-mcp-setup      跳过 Playwright MCP 自动配置
   --skip-install      跳过依赖安装（已装过时加速启动）
@@ -148,6 +149,7 @@ function Invoke-Python($Python, [string[]]$PyArgs) {
 $SkipMcpSetup = $false
 $SkipInstall = $false
 $SkipClarification = $false
+$AutoMode = $false
 $Fresh = $false
 $Tool = ""
 $DocsDir = ""
@@ -170,6 +172,9 @@ while ($i -lt $tokens.Count) {
         $i++
     } elseif ($a -eq "--skip-clarification") {
         $SkipClarification = $true
+        $i++
+    } elseif ($a -eq "--auto") {
+        $AutoMode = $true
         $i++
     } elseif ($a -eq "--fresh") {
         $Fresh = $true
@@ -290,6 +295,7 @@ if ($Tool) { [void]$RunArgs.Add("--tool"); [void]$RunArgs.Add($Tool) }
 if ($ReqName) { [void]$RunArgs.Add("--name"); [void]$RunArgs.Add($ReqName) }
 if ($DocsDir) { [void]$RunArgs.Add("--docs-dir"); [void]$RunArgs.Add($DocsDir) }
 if ($SkipClarification) { [void]$RunArgs.Add("--skip-clarification") }
+if ($AutoMode) { [void]$RunArgs.Add("--auto") }
 if ($Fresh) { [void]$RunArgs.Add("--fresh") }
 if ($SkipMcpSetup) { [void]$RunArgs.Add("--skip-mcp-setup") }
 

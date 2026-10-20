@@ -63,6 +63,11 @@ def main():
         help="跳过需求澄清 loop（适用于 echo 调试或非交互场景）",
     )
     parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="无人值守：禁止向用户提问，内容就绪后自动过审批门禁（隐含 --skip-clarification）",
+    )
+    parser.add_argument(
         "--fresh",
         action="store_true",
         help="清除该需求目录下已有产出（保留 00-requirement.md），从头开始",
@@ -145,6 +150,7 @@ def main():
         name=args.name,
         source_file=source_file,
         skip_clarification=args.skip_clarification,
+        auto=args.auto,
         fresh=args.fresh,
     )
 

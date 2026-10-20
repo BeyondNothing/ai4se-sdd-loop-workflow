@@ -264,8 +264,13 @@ class DevWorkflow:
         name: str | None = None,
         source_file: Path | None = None,
         skip_clarification: bool = False,
+        auto: bool = False,
         fresh: bool = False,
     ) -> DevWorkflowState:
+        # --auto 隐含跳过澄清；门禁在内容就绪后自动通过（见 phase_gate）
+        if auto:
+            skip_clarification = True
+
         app_root = self._resolve_app_root()
         resolved_docs_dir, requirement_slug = resolve_requirement_docs_dir(
             app_root,
@@ -297,12 +302,16 @@ class DevWorkflow:
                 "requirement_slug": requirement_slug,
                 "clarification_resolved": True,
                 "resume_from_node": "",
+                "auto": auto,
+                "skip_clarification": skip_clarification,
             }
-            done_state.update(restore_state_from_docs(docs_path, skip_clarification))
+            done_state.update(
+                restore_state_from_docs(docs_path, skip_clarification, auto=auto)
+            )
             return done_state
 
         start_node = determine_start_node(
-            docs_path, skip_clarification=skip_clarification
+            docs_path, skip_clarification=skip_clarification, auto=auto
         )
 
         initial: DevWorkflowState = {
@@ -330,6 +339,7 @@ class DevWorkflow:
             "clarification_round": 0,
             "user_clarifications": "",
             "skip_clarification": skip_clarification,
+            "auto": auto,
             "requirement_approved": False,
             "plan_approved": False,
             "test_cases_approved": False,
@@ -338,7 +348,9 @@ class DevWorkflow:
             "test_passed": False,
             "last_error": None,
         }
-        initial.update(restore_state_from_docs(docs_path, skip_clarification))
+        initial.update(
+            restore_state_from_docs(docs_path, skip_clarification, auto=auto)
+        )
         return self._graph.invoke(initial)
 
 

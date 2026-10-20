@@ -22,6 +22,7 @@ usage() {
   -t, --tool TOOL     覆盖 AI 工具: cursor | claude_code | oh_my_pi | omp | echo
   -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
+  --auto                无人值守：禁止向用户提问，内容就绪后自动过门禁
   --fresh               清除已有产出（保留 00-requirement.md）后重来
   --skip-mcp-setup      跳过 Playwright MCP 自动配置
   --skip-install      跳过依赖安装（已装过时加速启动）
@@ -169,6 +170,7 @@ REQ_NAME=""
 REQ_FILE=""
 REQ_TEXT=()
 SKIP_CLARIFICATION=0
+AUTO_MODE=0
 FRESH=0
 REQ_FILE=""
 REQ_TEXT=()
@@ -189,6 +191,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-clarification)
       SKIP_CLARIFICATION=1
+      shift
+      ;;
+    --auto)
+      AUTO_MODE=1
       shift
       ;;
     --fresh)
@@ -289,6 +295,9 @@ if [[ -n "$DOCS_DIR" ]]; then
 fi
 if [[ "$SKIP_CLARIFICATION" -eq 1 ]]; then
   RUN_ARGS+=(--skip-clarification)
+fi
+if [[ "$AUTO_MODE" -eq 1 ]]; then
+  RUN_ARGS+=(--auto)
 fi
 if [[ "$FRESH" -eq 1 ]]; then
   RUN_ARGS+=(--fresh)

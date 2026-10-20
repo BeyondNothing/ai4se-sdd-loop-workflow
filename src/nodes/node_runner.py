@@ -50,9 +50,17 @@ class NodeRunner:
         node_cfg = self.workflow_config.nodes[node_id]
         docs_dir = self._resolve_docs_dir(state)
 
-        prompt_template = self._load_prompt(node_cfg.prompt_file)
+        auto = bool(state.get("auto"))
+        prompt_rel = node_cfg.resolve_prompt_file(auto)
+        prompt_template = self._load_prompt(prompt_rel)
         context = self._build_context(node_cfg, state, docs_dir)
         prompt = self._render_prompt(prompt_template, context)
+        logger.info(
+            "节点 [%s] 使用 prompt %s（%s）",
+            node_cfg.name,
+            prompt_rel,
+            "无人值守" if auto else "人工介入",
+        )
 
         tool = get_ai_tool(node_cfg.tool)
         agent_cwd = self._agent_cwd(node_id)
@@ -89,6 +97,14 @@ class NodeRunner:
                 node_id=node_id,
                 prompt_dir=str(docs_dir),
             )
+            # 交互结束仍未过门禁时打日志，避免「已 approved 却停住」难排查
+            if node_id in _PHASE_NODE_IDS and not completion_check():
+                logger.warning(
+                    "节点 [%s] 交互已结束，但阶段门禁未通过"
+                    "（内容结构/requirement_type/approval 等仍不满足 phase_complete）；"
+                    "将进入 END，续跑前请检查定稿 YAML",
+                    node_cfg.name,
+                )
             content, result = self._resolve_interactive_content(
                 docs_dir, output_path, node_id, result
             )

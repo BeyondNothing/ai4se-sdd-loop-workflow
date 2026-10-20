@@ -35,8 +35,16 @@ class NodeConfig:
     prompt_file: str
     output_file: str
     mode: str = "headless"  # headless | interactive
+    # 无人值守（--auto）专用 prompt；缺省时与 prompt_file 相同
+    prompt_file_auto: str = ""
     inputs: list[NodeInput] = field(default_factory=list)
     extend_rules: list[str] = field(default_factory=list)
+
+    def resolve_prompt_file(self, auto: bool) -> str:
+        """按是否 --auto 选择人工介入 / 无人值守 prompt。"""
+        if auto and self.prompt_file_auto:
+            return self.prompt_file_auto
+        return self.prompt_file
 
 
 @dataclass
@@ -182,11 +190,14 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
 
     nodes: dict[str, NodeConfig] = {}
     for node_id, cfg in nodes_raw.items():
+        prompt = str(cfg["prompt"]).strip()
+        prompt_auto = str(cfg.get("prompt_auto") or "").strip() or prompt
         nodes[node_id] = NodeConfig(
             node_id=node_id,
             name=cfg["name"],
             tool=cfg["tool"],
-            prompt_file=cfg["prompt"],
+            prompt_file=prompt,
+            prompt_file_auto=prompt_auto,
             output_file=cfg["output"],
             mode=cfg.get("mode", "headless"),
             inputs=[_parse_input(i) for i in cfg.get("inputs", [])],
