@@ -498,15 +498,6 @@ class NodeRunner:
             ),
         }
 
-        if node_cfg.node_id == "verify_tests":
-            context["e2e_base_url"] = self.workflow_config.e2e_base_url.rstrip("/")
-            context["e2e_enabled"] = (
-                "true" if self.workflow_config.e2e_enabled else "false"
-            )
-            context["e2e_headless"] = (
-                "true" if self.workflow_config.e2e_headless else "false"
-            )
-
         cfg = get_phase_config(node_cfg.node_id)
         if cfg:
             ensure_draft_dir(docs_dir)

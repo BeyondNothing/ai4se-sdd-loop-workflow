@@ -16,12 +16,3 @@
 # PRD 默认：<业务根>/<docs_dir>/requirements/
 # 默认 spec；可改成 docs 等任意相对路径
 docs_dir: spec
-
-# 浏览器 E2E（verify_tests）
-e2e:
-  # false：跳过浏览器 E2E（单元/API 测试仍执行；报告中 TC-E2E-* 标 skip）
-  enabled: true
-  # false：有界面（默认弹出 Chrome）；true：无界面 headless
-  headless: false
-  # E2E 服务基址（host/端口）
-  base_url: http://localhost:8080

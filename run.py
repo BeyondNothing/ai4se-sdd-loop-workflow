@@ -12,7 +12,6 @@ PROJECT_ROOT = Path(__file__).parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.workflow import DevWorkflow  # noqa: E402
-from src.mcp import ensure_mcp_for_agents  # noqa: E402
 from src.config_loader import load_workflow_config  # noqa: E402
 from src.requirement_dir import resolve_app_root, resolve_docs_path  # noqa: E402
 
@@ -72,11 +71,6 @@ def main():
         action="store_true",
         help="清除该需求目录下已有产出（保留 00-requirement.md），从头开始",
     )
-    parser.add_argument(
-        "--skip-mcp-setup",
-        action="store_true",
-        help="跳过 Playwright MCP 自动配置（调试用）",
-    )
     args = parser.parse_args()
     wf_cfg = load_workflow_config(args.config)
     app_root = resolve_app_root(PROJECT_ROOT, wf_cfg.app_root)
@@ -118,24 +112,6 @@ def main():
             parser.error(
                 "请提供 requirement、--file，或 --name"
                 f"（且 {wf_cfg.docs_dir}/<name>/00-requirement.md 已存在）"
-            )
-
-    if not args.skip_mcp_setup:
-        if wf_cfg.e2e_enabled:
-            mcp_result = ensure_mcp_for_agents(
-                PROJECT_ROOT,
-                e2e_headless=wf_cfg.e2e_headless,
-            )
-            logging.info(
-                "MCP 已同步 (servers=%s, headless=%s, cursor=%s, omp=%s)",
-                mcp_result.get("servers", []),
-                wf_cfg.e2e_headless,
-                ", ".join(mcp_result.get("cursor_mcp_files", [])),
-                ", ".join(mcp_result.get("omp_mcp_files", [])),
-            )
-        else:
-            logging.info(
-                "E2E 已关闭 (workflow.e2e.enabled=false)，跳过 Playwright MCP 配置"
             )
 
     workflow = DevWorkflow(PROJECT_ROOT, args.config)

@@ -18,7 +18,6 @@ APP_WORKFLOW_CONFIG_FILENAME = "workflow.yaml"
 DEFAULT_AI_RULES_SUBDIR = "ai-rules"
 DEFAULT_DOCS_DIR = "spec"
 DEFAULT_APP_ROOT = ".."
-DEFAULT_E2E_BASE_URL = "http://localhost:8080"
 
 
 @dataclass
@@ -53,24 +52,6 @@ class WorkflowConfig:
     nodes: dict[str, NodeConfig]
     ai_rules_dir: str = DEFAULT_AI_RULES_SUBDIR
     app_root: str = ".."
-    e2e_enabled: bool = True
-    e2e_base_url: str = "http://localhost:8080"
-    e2e_headless: bool = False
-
-
-def _parse_bool(value: Any, default: bool = True) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    text = str(value).strip().lower()
-    if text in ("true", "1", "yes", "on"):
-        return True
-    if text in ("false", "0", "no", "off"):
-        return False
-    return default
 
 
 def _parse_input(raw: dict[str, str]) -> NodeInput:
@@ -122,23 +103,12 @@ def load_ai_rules_config(app_root: Path) -> tuple[str, dict[str, list[str]]]:
     return ai_rules_dir, node_rules
 
 
-def _parse_e2e_block(e2e: Any) -> tuple[bool, bool, str]:
-    if not isinstance(e2e, dict):
-        e2e = {}
-    return (
-        _parse_bool(e2e.get("enabled"), default=True),
-        _parse_bool(e2e.get("headless"), default=False),
-        str(e2e.get("base_url") or DEFAULT_E2E_BASE_URL).strip().rstrip("/")
-        or DEFAULT_E2E_BASE_URL,
-    )
-
-
 def load_app_runtime_settings(app_root: Path) -> dict[str, Any]:
-    """从业务根 sdd-loop-workflow-config/workflow.yaml 读取 docs_dir / e2e 等。"""
+    """从业务根 sdd-loop-workflow-config/workflow.yaml 读取 docs_dir 等。"""
     path = app_config_dir(app_root) / APP_WORKFLOW_CONFIG_FILENAME
     if not path.is_file():
         logger.warning(
-            "未找到 %s，将使用引擎 config/workflow.yaml 中的兜底 docs_dir/e2e"
+            "未找到 %s，将使用引擎 config/workflow.yaml 中的兜底 docs_dir"
             "（请在业务项目根执行 sdd-loop-workflow:init）",
             path,
         )
@@ -151,7 +121,7 @@ def load_app_runtime_settings(app_root: Path) -> dict[str, Any]:
     # 兼容误包一层 workflow:
     if "workflow" in data and isinstance(data["workflow"], dict):
         nested = dict(data["workflow"])
-        for key in ("docs_dir", "app_root", "e2e"):
+        for key in ("docs_dir", "app_root"):
             if key not in nested and key in data:
                 nested[key] = data[key]
         return nested
@@ -181,11 +151,6 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
         or DEFAULT_DOCS_DIR
     ).strip() or DEFAULT_DOCS_DIR
 
-    e2e_src = app_settings.get("e2e")
-    if e2e_src is None:
-        e2e_src = engine_workflow.get("e2e")
-    e2e_enabled, e2e_headless, e2e_base_url = _parse_e2e_block(e2e_src)
-
     ai_rules_dir, node_extend_rules = load_ai_rules_config(resolved_app)
 
     nodes: dict[str, NodeConfig] = {}
@@ -209,8 +174,5 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
         ai_rules_dir=ai_rules_dir,
         # app_root 仍作引擎侧兜底；sdd-loop-workflow:start 用环境变量覆盖
         app_root=fallback_app_root,
-        e2e_enabled=e2e_enabled,
-        e2e_base_url=e2e_base_url,
-        e2e_headless=e2e_headless,
         nodes=nodes,
     )

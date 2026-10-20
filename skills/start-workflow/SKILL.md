@@ -63,7 +63,6 @@ sdd-loop-workflow:start --tool {tool} --file "<PRD 绝对路径>"
 | `--auto` | 出现无人值守意图：**无人值守、全自动、不打断、不提问、自动跑完、别问我、auto、unattended** 等（中英文/同义都算）。普通「启动一下」**不要**加。加了则说明：过程中不会向你提问。 |
 | `--skip-clarification` | 用户只要跳过澄清、或 CI/echo 调试且未要求完整澄清时加上。若已加 `--auto`（隐含跳过澄清），**不必再写** `--skip-clarification`。 |
 | `--fresh` | 用户明确要重来、清空重跑、从头开始、覆盖已有产出时加上。续跑/接着跑时**禁止**加。 |
-| `--skip-mcp-setup` | 用户明确跳过 MCP/Playwright 配置，或说 MCP 已配好别同步时加上。未提及不加。 |
 | `--skip-install` | 用户明确跳过依赖安装、加速启动、venv 已就绪时加上。未提及不加。 |
 | `-h` / `--help` | 用户只想看帮助时，只输出帮助命令，不要拼启动。 |
 

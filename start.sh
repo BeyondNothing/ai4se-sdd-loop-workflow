@@ -24,7 +24,6 @@ usage() {
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
   --auto                无人值守：禁止向用户提问，内容就绪后自动过门禁
   --fresh               清除已有产出（保留 00-requirement.md）后重来
-  --skip-mcp-setup      跳过 Playwright MCP 自动配置
   --skip-install      跳过依赖安装（已装过时加速启动）
   -h, --help          显示帮助
 
@@ -87,82 +86,7 @@ ensure_venv() {
   venv_is_healthy || die "虚拟环境创建后仍不可用（缺少 activate/pip），请检查 Python 是否带 ensurepip"
 }
 
-MIN_NODE_MAJOR=18
-
-node_major_version() {
-  if ! command -v node >/dev/null 2>&1; then
-    echo 0
-    return
-  fi
-  node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0
-}
-
-ensure_node_for_playwright() {
-  if [[ "$SKIP_MCP_SETUP" -eq 1 ]]; then
-    return 0
-  fi
-
-  local major
-  major="$(node_major_version)"
-  if [[ "$major" -ge "$MIN_NODE_MAJOR" ]]; then
-    echo "==> Node: $(node -v)（满足 Playwright MCP 要求）"
-    return 0
-  fi
-
-  if ! command -v node >/dev/null 2>&1; then
-    echo "==> 未检测到 node，尝试通过 nvm 安装/切换..."
-  else
-    echo "==> 当前 Node $(node -v)，Playwright MCP 需要 ${MIN_NODE_MAJOR}+，尝试 nvm 切换..."
-  fi
-
-  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  if [[ -s "$NVM_DIR/nvm.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "$NVM_DIR/nvm.sh"
-  else
-    die "Node 版本低于 ${MIN_NODE_MAJOR} 且未找到 nvm（\$NVM_DIR/nvm.sh），请先 nvm install 20"
-  fi
-
-  local ver
-  for ver in 20 18; do
-    if nvm use "$ver" >/dev/null 2>&1; then
-      major="$(node_major_version)"
-      if [[ "$major" -ge "$MIN_NODE_MAJOR" ]]; then
-        echo "==> 已切换 Node: $(node -v)（nvm use ${ver}）"
-        return 0
-      fi
-    fi
-  done
-
-  echo "==> 本地无 Node ${MIN_NODE_MAJOR}+，尝试 nvm install 20..."
-  if nvm install 20 >/dev/null 2>&1 && nvm use 20 >/dev/null 2>&1; then
-    echo "==> 已安装并切换 Node: $(node -v)"
-    return 0
-  fi
-
-  die "无法切换到 Node ${MIN_NODE_MAJOR}+，Playwright MCP 将无法连接"
-}
-
-ensure_playwright_browsers() {
-  if [[ "$SKIP_MCP_SETUP" -eq 1 ]]; then
-    return 0
-  fi
-
-  local script="$SCRIPT_DIR/scripts/playwright-mcp.sh"
-  [[ -x "$script" ]] || chmod +x "$script"
-
-  if [[ "$(uname -s)" == "Darwin" ]] && [[ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]]; then
-    echo "==> Playwright MCP: 使用系统 Google Chrome"
-    return 0
-  fi
-
-  echo "==> 安装 Playwright MCP 浏览器（无系统 Chrome 时）..."
-  npx -y @playwright/mcp@0.0.79 install-browser chrome-for-testing || \
-    npx -y playwright install chrome || true
-}
-
 # ---------- parse args ----------
-SKIP_MCP_SETUP=0
 SKIP_INSTALL=0
 TOOL=""
 DOCS_DIR=""
@@ -180,10 +104,6 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       usage
       exit 0
-      ;;
-    --skip-mcp-setup)
-      SKIP_MCP_SETUP=1
-      shift
       ;;
     --skip-install)
       SKIP_INSTALL=1
@@ -302,13 +222,6 @@ fi
 if [[ "$FRESH" -eq 1 ]]; then
   RUN_ARGS+=(--fresh)
 fi
-if [[ "$SKIP_MCP_SETUP" -eq 1 ]]; then
-  RUN_ARGS+=(--skip-mcp-setup)
-fi
-
-ensure_node_for_playwright
-ensure_playwright_browsers
-
 echo "==> 启动 workflow"
 echo "    $VENV_PY run.py ${RUN_ARGS[*]}"
 echo

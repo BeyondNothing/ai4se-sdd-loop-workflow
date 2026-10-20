@@ -168,16 +168,7 @@ class OhMyPiTool(AITool):
 
     @staticmethod
     def _launch_prompt(prompt_file: Path) -> str:
-        return launch_read_prompt(
-            prompt_file,
-            extra=(
-                "Before any E2E or Playwright work: run `/mcp list` and confirm the "
-                "playwright server is ready. Call tools as mcp__playwright_browser_* "
-                "(e.g. mcp__playwright_browser_navigate), NOT browser_*. "
-                "Do NOT treat empty ListMcpResources, missing browser_* names, or "
-                "Unknown tool on browser_navigate as MCP unavailable."
-            ),
-        )
+        return launch_read_prompt(prompt_file)
 
     @staticmethod
     def _log_launch_cmd(cmd: list[str]) -> None:

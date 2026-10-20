@@ -33,7 +33,6 @@ function Show-Usage {
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
   --auto                无人值守：禁止向用户提问，内容就绪后自动过门禁
   --fresh               清除已有产出（保留 00-requirement.md）后重来
-  --skip-mcp-setup      跳过 Playwright MCP 自动配置
   --skip-install      跳过依赖安装（已装过时加速启动）
   -h, --help          显示帮助
 
@@ -61,66 +60,6 @@ function Get-NodeMajor {
     }
 }
 
-function Ensure-NodeForPlaywright([bool]$SkipMcpSetup) {
-    if ($SkipMcpSetup) { return }
-
-    $major = Get-NodeMajor
-    if ($major -ge $MinNodeMajor) {
-        Write-Host "==> Node: $(node -v)（满足 Playwright MCP 要求）"
-        return
-    }
-
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        Write-Host "==> 未检测到 node，尝试通过 nvm-windows 切换..."
-    } else {
-        Write-Host "==> 当前 Node $(node -v)，Playwright MCP 需要 ${MinNodeMajor}+，尝试 nvm 切换..."
-    }
-
-    $nvm = Get-Command nvm -ErrorAction SilentlyContinue
-    if (-not $nvm) {
-        Die "Node 版本低于 ${MinNodeMajor} 且未找到 nvm-windows，请先安装 Node.js 18+ 或 nvm install 20"
-    }
-
-    foreach ($ver in @("20", "18")) {
-        & nvm use $ver 2>$null | Out-Null
-        $major = Get-NodeMajor
-        if ($major -ge $MinNodeMajor) {
-            Write-Host "==> 已切换 Node: $(node -v)（nvm use $ver）"
-            return
-        }
-    }
-
-    Die "无法切换到 Node ${MinNodeMajor}+，Playwright MCP 将无法连接。请运行: nvm install 20"
-}
-
-function Test-SystemChrome {
-    $candidates = @(
-        (Join-Path ${env:ProgramFiles} "Google\Chrome\Application\chrome.exe"),
-        (Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application\chrome.exe"),
-        (Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe")
-    )
-    foreach ($path in $candidates) {
-        if ($path -and (Test-Path -LiteralPath $path)) { return $true }
-    }
-    return $false
-}
-
-function Ensure-PlaywrightBrowsers([bool]$SkipMcpSetup) {
-    if ($SkipMcpSetup) { return }
-
-    if (Test-SystemChrome) {
-        Write-Host "==> Playwright MCP: 使用系统 Google Chrome"
-        return
-    }
-
-    Write-Host "==> 安装 Playwright MCP 浏览器（无系统 Chrome 时）..."
-    $pkg = if ($env:PLAYWRIGHT_MCP_PKG) { $env:PLAYWRIGHT_MCP_PKG } else { "@playwright/mcp@0.0.79" }
-    try {
-        & npx -y $pkg install-browser chrome-for-testing
-    } catch {
-        try { & npx -y playwright install chrome } catch { }
-    }
-}
 
 function Resolve-PythonCommand {
     $candidates = @()
@@ -146,7 +85,6 @@ function Invoke-Python($Python, [string[]]$PyArgs) {
 }
 
 # ---------- parse args ----------
-$SkipMcpSetup = $false
 $SkipInstall = $false
 $SkipClarification = $false
 $AutoMode = $false
@@ -164,9 +102,6 @@ while ($i -lt $tokens.Count) {
     if ($a -in @("-h", "--help")) {
         Show-Usage
         exit 0
-    } elseif ($a -eq "--skip-mcp-setup") {
-        $SkipMcpSetup = $true
-        $i++
     } elseif ($a -eq "--skip-install") {
         $SkipInstall = $true
         $i++
@@ -297,10 +232,6 @@ if ($DocsDir) { [void]$RunArgs.Add("--docs-dir"); [void]$RunArgs.Add($DocsDir) }
 if ($SkipClarification) { [void]$RunArgs.Add("--skip-clarification") }
 if ($AutoMode) { [void]$RunArgs.Add("--auto") }
 if ($Fresh) { [void]$RunArgs.Add("--fresh") }
-if ($SkipMcpSetup) { [void]$RunArgs.Add("--skip-mcp-setup") }
-
-Ensure-NodeForPlaywright $SkipMcpSetup
-Ensure-PlaywrightBrowsers $SkipMcpSetup
 
 Write-Host "==> 启动 workflow"
 Write-Host ("    {0} run.py {1}" -f $VenvPython, ($RunArgs -join " "))
