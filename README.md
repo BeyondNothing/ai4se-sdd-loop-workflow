@@ -1,6 +1,8 @@
 # ai4se-sdd-loop-workflow
 
-从**需求 → 计划/用例 → 评审 → 任务 → 代码 → 测试**的工程化 Workflow。配置和产出写在业务项目里。
+从**需求 → 计划/用例 → 评审 → 任务 → 代码 → 测试 → AI Review**的工程化 Workflow。配置和产出写在业务项目里。
+
+**快速接入、可按项目扩展**：业务侧 `init` 即可用，规范与规则落在 `sdd-loop-workflow-config/`，不必改引擎；需要时再通过扩展 rule、prompt 与节点编排加深定制。
 
 ---
 
@@ -30,7 +32,8 @@ sdd-loop-workflow:start --tool cursor --name login             # 续跑，勿加
 | `--fresh` | 清空该需求产出后重来 |
 | `--tool` | `cursor` / `claude_code` / `omp` / `echo` |
 
-需要 Python 3.10+ 和已登录的 AI CLI。找不到引擎时加 `--workflow-root <引擎目录>`。
+需要 Python 3.10+ 和已登录的 AI CLI。
+
 ---
 
 ## 2. `init` 在业务项目里生成什么
@@ -48,9 +51,25 @@ your-project/
 |------|------|
 | `workflow.yaml` | 产出目录名（`docs_dir`）等 |
 | `ai-rules.yaml` + `ai-rules/` | 项目扩展规范，注入各节点；优先级高于引擎通用 prompt |
-| `start-workflow` skill | 根据上下文拼 `sdd-loop-workflow:start ...`，须在 AI session **外**执行 |
+| `start-workflow` skill | 准备需求文件并拼装启动命令（见下）；**不在当前 AI 对话里执行** |
 
 跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `06-ai-review.md`）。
+
+### `start-workflow` skill 用在什么时候
+
+`init` 会把该 skill 装到业务项目的 AI 技能目录。在对话里触发它，只做两件事：**落本地需求文件** + **拼好启动命令**；真正跑 workflow 必须你自己在**终端**执行。
+
+| 场景 | 你怎么说 | skill 做什么 |
+|------|----------|--------------|
+| 本地已有 PRD | 给出文件路径 | 校验路径存在，直接拼 `sdd-loop-workflow:start --file ...` |
+| 需求在外部系统（Jira、Colla 等） | 告诉**卡号 / 需求标识** | 按项目已配置的 **MCP** 拉取正文 → 写入本地（如 `docs/requirements/<标识>.md`）→ 再拼启动命令 |
+| 两边都没有 | — | 先问你要路径或外部来源，不瞎拼命令 |
+
+要点：
+
+- MCP（Jira / Colla 等）需事先在 AI 环境配好；skill **不猜** MCP 名字，步骤以项目 rule / skill 输入为准。
+- skill **禁止**在当前 AI session 里执行启动命令；你复制命令到业务项目根的终端再跑（或结束对话后在系统终端跑），编排进程才能接管交互节点并续跑。
+- 审批通过、续跑都**不要**再让 skill 重跑一遍；外部终端里已在跑的进程会自己进下一节点。
 
 ---
 
@@ -77,16 +96,66 @@ your-project/
 
 ---
 
-## 4. 扩展点
+## 4. 业务配置说明（`sdd-loop-workflow-config/`）
 
-1. **项目规范（最常用）**  
-   改 `sdd-loop-workflow-config/ai-rules/` 与 `ai-rules.yaml`，不必改引擎。
+`init` 生成后改这里即可按项目定制，**不必改引擎**。
 
-2. **docs_dir 等业务运行时**  
-   改 `sdd-loop-workflow-config/workflow.yaml`。
+### `workflow.yaml` — 运行时目录
 
-3. **节点 prompt / 默认工具**  
-   改引擎仓库 `config/workflow.yaml` 与 `prompts/`（人工与 `.auto` 成对）。
+| 配置项 | 作用 |
+|--------|------|
+| `docs_dir` | 文档产出根目录（相对业务项目根）。默认 `spec`；需求产出为 `<业务根>/<docs_dir>/<需求名>/`，如 `spec/login/` |
 
-4. **流程拓扑 / 门禁 / 新 AI 后端**  
-   改引擎代码：`src/workflow.py`、`router.py`、`phase_gate.py`、`agents/`。
+节点用的 tool / prompt / mode **不在这里配**，在引擎仓库的 `config/workflow.yaml`。
+
+### `ai-rules.yaml` — 扩展规则映射
+
+规则正文会注入对应节点 prompt 的 `{{ai_rules}}`，**优先级高于**引擎通用提示词；`--auto` 时也优先按这里消解歧义。
+
+| 配置项 | 作用 |
+|--------|------|
+| `ai_rules_dir` | 规则正文所在目录，相对本配置目录；默认 `ai-rules`（即 `sdd-loop-workflow-config/ai-rules/`） |
+| `nodes.<节点ID>` | 该节点要注入的 markdown 文件列表（文件名相对 `ai_rules_dir`）。未列出的节点不注入扩展 rule |
+
+示例：
+
+```yaml
+ai_rules_dir: ai-rules
+
+nodes:
+  implement_code:
+    - coding-style.md
+    - package-structure.md
+  verify_tests:
+    - test-conventions.md
+  ai_review:
+    - coding-style.md
+    - security-baseline.md
+```
+
+同一 `.md` 可挂到多个节点下复用；按节点拆文件更清晰（实现吃风格与分层，验证吃测试栈，AI Review 吃风格与安全等）。
+
+### `ai-rules/*.md` — 规则正文
+
+每个文件写项目自己的硬约束（语言、分层、测试栈、安全基线等）。引擎 prompt 只定通用流程，**具体规范写在这里**。
+
+**编码约定示例**（`ai-rules/coding-style.md`）：
+
+```markdown
+# 编码约定（示例）
+
+- 新代码放在 `com.example.order` 下按应用服务 / 领域 / 基础设施分层，勿新建平行顶层包。
+- 禁止为单次调用去改已被多处使用的公共 Utils；优先在本模块写私有方法。
+- 魔法数字：超时、重试次数等提取为命名常量；业务状态码用枚举，勿散落字面量。
+- API 入参校验失败返回统一错误码，勿直接抛未包装异常给调用方。
+```
+
+**测试约定示例**（`ai-rules/test-conventions.md`）：
+
+```markdown
+# 测试约定（示例）
+
+- 单测用项目已有 JUnit5 + Mockito；禁止另起测试框架。
+- 无 API 集成测试工程时，`TC-API-*` 标 skip，并在报告写明依据。
+- 外部支付 / 短信一律 mock；不要在 CI 打真实第三方。
+```
