@@ -28,7 +28,7 @@
 
 ## 项目定制约束（**必须严格遵守**）
 
-以下约束来自本项目 `config/ai-rules.yaml` 配置，**优先级高于通用习惯、默认推断及模型内置偏好**。若与本文其他章节或通用 prompt 描述冲突，**以本节为准**。
+以下约束来自业务项目根 `sdd-loop-workflow-config/ai-rules.yaml` 配置，**优先级高于通用习惯、默认推断及模型内置偏好**。若与本文其他章节或通用 prompt 描述冲突，**以本节为准**。
 
 - **必须**通读并逐条遵守；不得选择性忽略
 - 若约束与需求/计划/任务存在冲突，**必须在会话中主动提出**，待用户决策后再继续；**不得静默违反**
@@ -65,7 +65,7 @@
 
 ## E2E（浏览器验收）
 
-配置（`config/workflow.yaml`）：
+配置（业务根 `sdd-loop-workflow-config/workflow.yaml` 的 `e2e`）：
 
 - `workflow.e2e.enabled`: **{{e2e_enabled}}**
 - `workflow.e2e.headless`: **{{e2e_headless}}**（`false`=有界面，E2E 时会弹出 Chrome；`true`=无界面 headless）

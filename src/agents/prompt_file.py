@@ -21,7 +21,7 @@ def save_node_prompt(
     if prompt_dir is not None:
         target_dir = Path(prompt_dir).resolve() / TEMP_PROMPT_DIR
     else:
-        target_dir = Path(cwd).resolve() / "docs" / TEMP_PROMPT_DIR
+        target_dir = Path(cwd).resolve() / "spec" / TEMP_PROMPT_DIR
     target_dir.mkdir(parents=True, exist_ok=True)
     stem = node_id.strip() if node_id else DEFAULT_PROMPT_STEM
     prompt_file = target_dir / f"{stem}.prompt.md"

@@ -48,7 +48,7 @@ sdd-loop-workflow:start --tool {tool} --file "<PRD 绝对路径>"
 1. 用哪一个 MCP、按什么步骤读，只以这次 skill 的输入和项目里已经配置的 rule 为准（例如 Cursor rules、`CLAUDE.md`、`AGENTS.md`、omp rules、`ai-rules`）。
 2. 不要猜测 MCP 名字，也不要编写读取步骤。MCP 由用户事先配好。
 3. 输入和 rule 都没有说明怎么读时，停下来问用户，不要拼装启动命令。
-4. 读到正文后，写入业务项目根的 `docs/requirements/<标识>.md`。目录不存在就创建。同名文件直接覆盖。
+4. 读到正文后，写入业务项目根的 `spec/requirements/<标识>.md`（若业务侧 `sdd-loop-workflow-config/workflow.yaml` 改过 `docs_dir`，则用该目录下的 `requirements/`）。目录不存在就创建。同名文件直接覆盖。
 5. 标识优先用需求编号；没有编号时用标题，只保留字母、数字、中文和 `-`。
 6. 正文为空时停下来，不要拼装启动命令。写入后的绝对路径就是 `--file`。
 

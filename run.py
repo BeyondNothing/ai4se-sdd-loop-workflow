@@ -39,12 +39,12 @@ def main():
     parser.add_argument(
         "--name", "-n",
         default=None,
-        help="需求目录名（默认从文件名或需求首行推导），产出落在 <应用根>/docs/<name>/",
+        help="需求目录名（默认从文件名或需求首行推导），产出落在 <应用根>/<docs_dir>/<name>/",
     )
     parser.add_argument(
         "--docs-dir",
         default=None,
-        help="覆盖完整产出目录（相对应用根或绝对路径；默认 <应用根>/docs/<需求名>/）",
+        help="覆盖完整产出目录（相对应用根或绝对路径；默认 <应用根>/<docs_dir>/<需求名>/）",
     )
     parser.add_argument(
         "--config",
@@ -101,7 +101,7 @@ def main():
             if named_sample.is_file():
                 source_file = named_sample
                 requirement = named_sample.read_text(encoding="utf-8")
-                logging.info("从 docs/requirements 读取需求: %s", named_sample)
+                logging.info("从 %s/requirements 读取需求: %s", wf_cfg.docs_dir, named_sample)
 
     if requirement is None:
         default_sample = app_root / wf_cfg.docs_dir / "requirements" / "jwt-login-requirement.md"
@@ -110,7 +110,10 @@ def main():
             requirement = default_sample.read_text(encoding="utf-8")
             logging.info("未传需求，使用默认: %s", default_sample)
         else:
-            parser.error("请提供 requirement、--file，或 --name（且 docs/<name>/00-requirement.md 已存在）")
+            parser.error(
+                "请提供 requirement、--file，或 --name"
+                f"（且 {wf_cfg.docs_dir}/<name>/00-requirement.md 已存在）"
+            )
 
     if not args.skip_mcp_setup:
         if wf_cfg.e2e_enabled:

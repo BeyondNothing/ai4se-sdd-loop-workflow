@@ -18,7 +18,7 @@ usage() {
 
 选项:
   -f, --file PATH     从文件读取需求（推荐）
-  -n, --name NAME     需求目录名，产出落在 <应用根>/docs/<NAME>/
+  -n, --name NAME     需求目录名，产出落在 <应用根>/spec/<NAME>/（docs_dir 可配）
   -t, --tool TOOL     覆盖 AI 工具: cursor | claude_code | oh_my_pi | omp | echo
   -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
@@ -29,13 +29,13 @@ usage() {
 
 示例:
   # 调试：不调真实 AI，只跑通编排
-  # 产出在 <应用根>/docs/<name>/（非本仓库内）
-  ./start.sh --tool echo --skip-clarification --file ../docs/requirements/jwt-login-requirement.md --name jwt-login
+  # 产出在 <应用根>/spec/<name>/（非本仓库内；docs_dir 默认 spec）
+  ./start.sh --tool echo --skip-clarification --file ../spec/requirements/jwt-login-requirement.md --name jwt-login
 
   # 指定需求目录名
-  ./start.sh --name jwt-login --file ../docs/requirements/jwt-login-requirement.md
+  ./start.sh --name jwt-login --file ../spec/requirements/jwt-login-requirement.md
 
-  # 续跑：已有 docs/jwt-login/00-requirement.md 时可只传 --name
+  # 续跑：已有 spec/jwt-login/00-requirement.md 时可只传 --name
   ./start.sh --name jwt-login
 
   # 直接传需求文本
@@ -260,7 +260,7 @@ fi
 
 # ---------- default requirement ----------
 if [[ -z "$REQ_FILE" && ${#REQ_TEXT[@]} -eq 0 ]]; then
-  DEFAULT_REQ="../docs/requirements/jwt-login-requirement.md"
+  DEFAULT_REQ="../spec/requirements/jwt-login-requirement.md"
   if [[ -f "$DEFAULT_REQ" ]]; then
     echo "==> 未传需求，使用默认: $DEFAULT_REQ"
     REQ_FILE="$DEFAULT_REQ"

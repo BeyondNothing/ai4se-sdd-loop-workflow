@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 SKILL_NAME = "start-workflow"
+APP_CONFIG_DIR_NAME = "sdd-loop-workflow-config"
 
 # 相对业务项目根 → (目录, --tool 取值)
 AGENT_SKILL_DIRS = {
@@ -134,10 +135,44 @@ def install_skills(engine: Path, app_root: Path) -> list[Path]:
     return written
 
 
+def _engine_app_config_template(engine: Path) -> Path:
+    path = engine / "config" / APP_CONFIG_DIR_NAME
+    if not path.is_dir():
+        raise SystemExit(f"错误: 找不到配置模板目录: {path}")
+    return path
+
+
+def install_app_config(engine: Path, app_root: Path) -> list[str]:
+    """在业务根创建 sdd-loop-workflow-config（已存在的文件不覆盖）。"""
+    src_root = _engine_app_config_template(engine)
+    dest_root = app_root / APP_CONFIG_DIR_NAME
+    dest_root.mkdir(parents=True, exist_ok=True)
+    actions: list[str] = []
+
+    for src in sorted(src_root.rglob("*")):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(src_root)
+        dest = dest_root / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists():
+            actions.append(f"跳过(已存在): {dest}")
+            continue
+        shutil.copy2(src, dest)
+        actions.append(f"已创建: {dest}")
+
+    if not any(dest_root.rglob("*")):
+        actions.append(f"已创建目录: {dest_root}")
+    return actions
+
+
 def command_init(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="sdd-loop-workflow:init",
-        description="安装 start-workflow skill 到 Cursor / Claude Code / omp",
+        description=(
+            "安装 start-workflow skill，并在业务根创建 sdd-loop-workflow-config"
+            "（含 workflow.yaml / ai-rules）"
+        ),
     )
     parser.add_argument("--app-root", type=Path, default=None, help="业务项目根")
     parser.add_argument("--workflow-root", type=Path, default=None, help="引擎目录（含 start.sh）")
@@ -146,11 +181,14 @@ def command_init(argv: list[str]) -> int:
     engine = find_engine_root(args.workflow_root)
     app_root = resolve_app_root(engine, args.app_root)
     written = install_skills(engine, app_root)
+    config_actions = install_app_config(engine, app_root)
 
     print(f"==> 引擎目录: {engine}")
     print(f"==> 业务项目根: {app_root}")
     for path in written:
         print(f"==> 已安装: {path}")
+    for line in config_actions:
+        print(f"==> {line}")
     return 0
 
 

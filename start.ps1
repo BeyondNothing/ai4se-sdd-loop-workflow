@@ -27,7 +27,7 @@ function Show-Usage {
 
 选项:
   -f, --file PATH     从文件读取需求（推荐）
-  -n, --name NAME     需求目录名，产出落在 <应用根>/docs/<NAME>/
+  -n, --name NAME     需求目录名，产出落在 <应用根>/spec/<NAME>/（docs_dir 可配）
   -t, --tool TOOL     覆盖 AI 工具: cursor | claude_code | oh_my_pi | omp | echo
   -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
