@@ -117,3 +117,12 @@ nodes:
       - doc: 02-test-cases.md
       - doc: 03-tasks.md
       - doc: 04-implementation.md
+
+  ai_review:
+    name: AI 代码评审
+    tool: cursor
+    mode: interactive
+    prompt: prompts/06_ai_review.md
+    prompt_auto: prompts/06_ai_review.auto.md
+    output: 06-ai-review.md
+    inputs: []

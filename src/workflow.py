@@ -153,6 +153,9 @@ class DevWorkflow:
     def verify_tests(self, state: DevWorkflowState) -> DevWorkflowState:
         return self.node_runner.run_node("verify_tests", state)
 
+    def ai_review(self, state: DevWorkflowState) -> DevWorkflowState:
+        return self.node_runner.run_node("ai_review", state)
+
     def _route_from_start(self, state: DevWorkflowState) -> str:
         return state.get("resume_from_node") or "analyze_requirements"
 
@@ -200,6 +203,7 @@ class DevWorkflow:
         workflow.add_node("split_tasks", self.split_tasks)
         workflow.add_node("implement_code", self.implement_code)
         workflow.add_node("verify_tests", self.verify_tests)
+        workflow.add_node("ai_review", self.ai_review)
 
         workflow.set_entry_point("route_next")
         workflow.add_conditional_edges(
@@ -213,6 +217,7 @@ class DevWorkflow:
                 "split_tasks": "split_tasks",
                 "implement_code": "implement_code",
                 "verify_tests": "verify_tests",
+                "ai_review": "ai_review",
             },
         )
         workflow.add_conditional_edges(
@@ -248,7 +253,8 @@ class DevWorkflow:
             },
         )
         workflow.add_edge("implement_code", "verify_tests")
-        workflow.add_edge("verify_tests", END)
+        workflow.add_edge("verify_tests", "ai_review")
+        workflow.add_edge("ai_review", END)
 
         return workflow.compile()
 
@@ -294,7 +300,7 @@ class DevWorkflow:
         original_path = save_original_requirement(docs_path, requirement)
 
         if is_workflow_complete(docs_path):
-            logger.info("Workflow 已完成（05-test-report.md status=completed）")
+            logger.info("Workflow 已完成（06-ai-review.md status=completed）")
             done_state: DevWorkflowState = {
                 "requirement": requirement,
                 "app_root": str(app_root),

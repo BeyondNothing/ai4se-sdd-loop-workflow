@@ -50,14 +50,14 @@ your-project/
 | `ai-rules.yaml` + `ai-rules/` | 项目扩展规范，注入各节点；优先级高于引擎通用 prompt |
 | `start-workflow` skill | 根据上下文拼 `sdd-loop-workflow:start ...`，须在 AI session **外**执行 |
 
-跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `05-test-report.md`）。
+跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `06-ai-review.md`）。
 
 ---
 
 ## 3. 有哪些节点
 
 ```text
-需求 → 并行(计划+用例) → 评审 → 任务拆分 → 实现 → 测试
+需求 → 并行(计划+用例) → 评审 → 任务拆分 → 实现 → 测试 → AI Review
 ```
 
 | 节点 | 产出 | 做什么 |
@@ -67,11 +67,13 @@ your-project/
 | 计划与用例评审 | `02-plan-test-review.md` | 对齐并确认 |
 | 任务拆分 | `03-tasks.md` | 任务 + API 详细设计 |
 | 代码实现 | `04-implementation.md` + 业务代码 | 只写生产代码 |
-| 测试自验证 | `05-test-report.md` | 按项目 AS IS 跑单测；API/E2E 有栈才跑 |
+| 测试自验证 | `05-test-report.md` | 写测→跑绿→置信度；API/E2E 有栈才跑 |
+| AI 代码评审 | `06-ai-review.md` | 针对改动代码做技术整洁度/简单重构并测绿（不读需求文档） |
 
 - 人工：`prompts/*.md`，澄清与审批需确认  
 - `--auto`：`prompts/*.auto.md`，按扩展 rule 自决，不提问  
-- 测试代码只在「测试自验证」写；实现节点不写 `src/test`
+- 测试代码只在「测试自验证」写；实现节点不写 `src/test`  
+- AI Review 的语言/风格细则放在项目 `ai-rules`，引擎 prompt 只定通用整洁度闭环
 
 ---
 

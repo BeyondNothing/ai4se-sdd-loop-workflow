@@ -36,7 +36,7 @@ from ..state import DevWorkflowState
 logger = logging.getLogger(__name__)
 
 _PHASE_NODE_IDS = frozenset(PHASE_CONFIGS.keys())
-_CODE_WORK_NODES = frozenset({"implement_code", "verify_tests"})
+_CODE_WORK_NODES = frozenset({"implement_code", "verify_tests", "ai_review"})
 
 
 class NodeRunner:
@@ -412,6 +412,7 @@ class NodeRunner:
             "split_tasks": "tasks",
             "implement_code": "implement",
             "verify_tests": "verify",
+            "ai_review": "ai_review",
         }
         phase = phase_labels.get(node_id, node_id)
         next_node = ""
@@ -426,6 +427,8 @@ class NodeRunner:
         elif node_id == "implement_code":
             next_node = "verify_tests"
         elif node_id == "verify_tests":
+            next_node = "ai_review"
+        elif node_id == "ai_review":
             next_node = ""
 
         if skip and node_id == "analyze_requirements" and phase_complete(

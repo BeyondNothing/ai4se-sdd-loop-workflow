@@ -30,7 +30,8 @@ logger = logging.getLogger(__name__)
 
 # 产出文件检查顺序：越靠前表示流程越靠后
 RESUME_CHECKPOINTS: list[tuple[str, str | None]] = [
-    ("05-test-report.md", None),
+    ("06-ai-review.md", None),
+    ("05-test-report.md", "ai_review"),
     ("04-implementation.md", "verify_tests"),
     ("03-tasks.md", "implement_code"),
     ("02-plan-test-review.md", "split_tasks"),
@@ -50,6 +51,7 @@ ROUTABLE_NODES = frozenset(
         "split_tasks",
         "implement_code",
         "verify_tests",
+        "ai_review",
     }
 )
 
@@ -127,7 +129,7 @@ def _resolve_plan_tests_phase_start(
 
 
 def is_workflow_complete(docs_dir: Path) -> bool:
-    path = docs_dir / "05-test-report.md"
+    path = docs_dir / "06-ai-review.md"
     if not path.exists():
         return False
     status = parse_workflow_status_file(path)
@@ -273,7 +275,7 @@ def _resolve_from_status(
                 return "split_tasks"
         return status.next_node
 
-    if status.status == "completed" and not status.next_node and filename == "05-test-report.md":
+    if status.status == "completed" and not status.next_node and filename == "06-ai-review.md":
         return None
 
     return _infer_from_status_fields(

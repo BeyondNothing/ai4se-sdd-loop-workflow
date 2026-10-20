@@ -26,3 +26,5 @@ nodes:
     - ddd-design-standard.md
   verify_tests:
     - ddd-design-standard.md
+  ai_review:
+    - ddd-design-standard.md
