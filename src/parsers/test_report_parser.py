@@ -44,11 +44,10 @@ _VERIFY_SECTION_MARKERS = (
     ("问题", ("问题与建议", "问题")),
     ("追溯", ("测试方法", "用例追溯", "追溯")),
 )
-_IMAGE_LINK = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 
 
 def verify_report_ready(content: str) -> bool:
-    """报告须有完整章节 + 用例结果表；截图链接只能指向 e2e-screenshots/。"""
+    """报告须有完整章节 + 用例结果表。"""
     body = _strip_workflow_status(content).strip()
     if len(body) < 1800:
         return False
@@ -56,22 +55,6 @@ def verify_report_ready(content: str) -> bool:
         return False
     for _name, aliases in _VERIFY_SECTION_MARKERS:
         if not any(alias in body for alias in aliases):
-            return False
-    if not _e2e_screenshot_links_ok(body):
-        return False
-    return True
-
-
-def _e2e_screenshot_links_ok(body: str) -> bool:
-    links = [match.group(1).strip() for match in _IMAGE_LINK.finditer(body)]
-    e2e_ran = bool(re.search(r"TC-E2E-\S+\s*\|\s*(pass|fail|blocked)", body, re.I))
-    if e2e_ran and not links:
-        return False
-    for url in links:
-        normalized = url.replace("\\", "/").split("?", 1)[0]
-        if normalized.startswith("http://") or normalized.startswith("https://"):
-            continue
-        if "/e2e-screenshots/" not in f"/{normalized}":
             return False
     return True
 

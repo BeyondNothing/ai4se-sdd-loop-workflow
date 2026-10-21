@@ -18,24 +18,24 @@ usage() {
 
 选项:
   -f, --file PATH     从文件读取需求（推荐）
-  -n, --name NAME     需求目录名，产出落在 <应用根>/docs/<NAME>/
+  -n, --name NAME     需求目录名，产出落在 <应用根>/spec/<NAME>/（docs_dir 可配）
   -t, --tool TOOL     覆盖 AI 工具: cursor | claude_code | oh_my_pi | omp | echo
   -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
+  --auto                无人值守：禁止向用户提问，内容就绪后自动过门禁
   --fresh               清除已有产出（保留 00-requirement.md）后重来
-  --skip-mcp-setup      跳过 Playwright MCP 自动配置
   --skip-install      跳过依赖安装（已装过时加速启动）
   -h, --help          显示帮助
 
 示例:
   # 调试：不调真实 AI，只跑通编排
-  # 产出在 <应用根>/docs/<name>/（非本仓库内）
-  ./start.sh --tool echo --skip-clarification --file ../docs/requirements/jwt-login-requirement.md --name jwt-login
+  # 产出在 <应用根>/spec/<name>/（非本仓库内；docs_dir 默认 spec）
+  ./start.sh --tool echo --skip-clarification --file ../spec/requirements/jwt-login-requirement.md --name jwt-login
 
   # 指定需求目录名
-  ./start.sh --name jwt-login --file ../docs/requirements/jwt-login-requirement.md
+  ./start.sh --name jwt-login --file ../spec/requirements/jwt-login-requirement.md
 
-  # 续跑：已有 docs/jwt-login/00-requirement.md 时可只传 --name
+  # 续跑：已有 spec/jwt-login/00-requirement.md 时可只传 --name
   ./start.sh --name jwt-login
 
   # 直接传需求文本
@@ -48,82 +48,45 @@ die() {
   exit 1
 }
 
-MIN_NODE_MAJOR=18
-
-node_major_version() {
-  if ! command -v node >/dev/null 2>&1; then
-    echo 0
-    return
+venv_python() {
+  if [[ -x "$VENV_DIR/bin/python" ]]; then
+    echo "$VENV_DIR/bin/python"
+  elif [[ -x "$VENV_DIR/Scripts/python.exe" ]]; then
+    echo "$VENV_DIR/Scripts/python.exe"
+  else
+    echo ""
   fi
-  node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0
 }
 
-ensure_node_for_playwright() {
-  if [[ "$SKIP_MCP_SETUP" -eq 1 ]]; then
-    return 0
+venv_is_healthy() {
+  local py
+  py="$(venv_python)"
+  [[ -n "$py" ]] || return 1
+  # activate 缺失或 pip 不可用都视为损坏（常见于中断创建的半成品 .venv）
+  if [[ ! -f "$VENV_DIR/bin/activate" && ! -f "$VENV_DIR/Scripts/activate.bat" ]]; then
+    return 1
   fi
-
-  local major
-  major="$(node_major_version)"
-  if [[ "$major" -ge "$MIN_NODE_MAJOR" ]]; then
-    echo "==> Node: $(node -v)（满足 Playwright MCP 要求）"
-    return 0
-  fi
-
-  if ! command -v node >/dev/null 2>&1; then
-    echo "==> 未检测到 node，尝试通过 nvm 安装/切换..."
-  else
-    echo "==> 当前 Node $(node -v)，Playwright MCP 需要 ${MIN_NODE_MAJOR}+，尝试 nvm 切换..."
-  fi
-
-  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  if [[ -s "$NVM_DIR/nvm.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "$NVM_DIR/nvm.sh"
-  else
-    die "Node 版本低于 ${MIN_NODE_MAJOR} 且未找到 nvm（\$NVM_DIR/nvm.sh），请先 nvm install 20"
-  fi
-
-  local ver
-  for ver in 20 18; do
-    if nvm use "$ver" >/dev/null 2>&1; then
-      major="$(node_major_version)"
-      if [[ "$major" -ge "$MIN_NODE_MAJOR" ]]; then
-        echo "==> 已切换 Node: $(node -v)（nvm use ${ver}）"
-        return 0
-      fi
-    fi
-  done
-
-  echo "==> 本地无 Node ${MIN_NODE_MAJOR}+，尝试 nvm install 20..."
-  if nvm install 20 >/dev/null 2>&1 && nvm use 20 >/dev/null 2>&1; then
-    echo "==> 已安装并切换 Node: $(node -v)"
-    return 0
-  fi
-
-  die "无法切换到 Node ${MIN_NODE_MAJOR}+，Playwright MCP 将无法连接"
+  "$py" -m pip --version >/dev/null 2>&1
 }
 
-ensure_playwright_browsers() {
-  if [[ "$SKIP_MCP_SETUP" -eq 1 ]]; then
+ensure_venv() {
+  if venv_is_healthy; then
+    echo "==> 复用虚拟环境: $VENV_DIR"
     return 0
   fi
 
-  local script="$SCRIPT_DIR/scripts/playwright-mcp.sh"
-  [[ -x "$script" ]] || chmod +x "$script"
-
-  if [[ "$(uname -s)" == "Darwin" ]] && [[ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]]; then
-    echo "==> Playwright MCP: 使用系统 Google Chrome"
-    return 0
+  if [[ -e "$VENV_DIR" ]]; then
+    echo "==> 虚拟环境不完整，重建: $VENV_DIR"
+    rm -rf "$VENV_DIR"
+  else
+    echo "==> 创建虚拟环境: $VENV_DIR"
   fi
 
-  echo "==> 安装 Playwright MCP 浏览器（无系统 Chrome 时）..."
-  npx -y @playwright/mcp@0.0.79 install-browser chrome-for-testing || \
-    npx -y playwright install chrome || true
+  "$PYTHON_BIN" -m venv "$VENV_DIR" || die "创建虚拟环境失败: $VENV_DIR"
+  venv_is_healthy || die "虚拟环境创建后仍不可用（缺少 activate/pip），请检查 Python 是否带 ensurepip"
 }
 
 # ---------- parse args ----------
-SKIP_MCP_SETUP=0
 SKIP_INSTALL=0
 TOOL=""
 DOCS_DIR=""
@@ -131,6 +94,7 @@ REQ_NAME=""
 REQ_FILE=""
 REQ_TEXT=()
 SKIP_CLARIFICATION=0
+AUTO_MODE=0
 FRESH=0
 REQ_FILE=""
 REQ_TEXT=()
@@ -141,16 +105,16 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    --skip-mcp-setup)
-      SKIP_MCP_SETUP=1
-      shift
-      ;;
     --skip-install)
       SKIP_INSTALL=1
       shift
       ;;
     --skip-clarification)
       SKIP_CLARIFICATION=1
+      shift
+      ;;
+    --auto)
+      AUTO_MODE=1
       shift
       ;;
     --fresh)
@@ -207,28 +171,22 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "未找到 $PYTHON_BIN，请先�
 PY_VERSION="$("$PYTHON_BIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
 echo "==> Python: $PYTHON_BIN ($PY_VERSION)"
 
-if [[ ! -d "$VENV_DIR" ]]; then
-  echo "==> 创建虚拟环境: $VENV_DIR"
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
-else
-  echo "==> 复用虚拟环境: $VENV_DIR"
-fi
-
-# shellcheck disable=SC1091
-source "$VENV_DIR/bin/activate"
+ensure_venv
+VENV_PY="$(venv_python)"
+[[ -n "$VENV_PY" ]] || die "未找到虚拟环境 Python"
 
 if [[ "$SKIP_INSTALL" -eq 0 ]]; then
   echo "==> 升级 pip"
-  python -m pip install --upgrade pip >/dev/null
+  "$VENV_PY" -m pip install --upgrade pip >/dev/null
   echo "==> 安装 ai4se-sdd-loop-workflow（editable，含 langgraph 等依赖）"
-  pip install -e .
+  "$VENV_PY" -m pip install -e . || die "pip install -e . 失败"
 else
   echo "==> 跳过依赖安装 (--skip-install)"
 fi
 
 # ---------- default requirement ----------
 if [[ -z "$REQ_FILE" && ${#REQ_TEXT[@]} -eq 0 ]]; then
-  DEFAULT_REQ="../docs/requirements/jwt-login-requirement.md"
+  DEFAULT_REQ="../spec/requirements/jwt-login-requirement.md"
   if [[ -f "$DEFAULT_REQ" ]]; then
     echo "==> 未传需求，使用默认: $DEFAULT_REQ"
     REQ_FILE="$DEFAULT_REQ"
@@ -258,18 +216,14 @@ fi
 if [[ "$SKIP_CLARIFICATION" -eq 1 ]]; then
   RUN_ARGS+=(--skip-clarification)
 fi
+if [[ "$AUTO_MODE" -eq 1 ]]; then
+  RUN_ARGS+=(--auto)
+fi
 if [[ "$FRESH" -eq 1 ]]; then
   RUN_ARGS+=(--fresh)
 fi
-if [[ "$SKIP_MCP_SETUP" -eq 1 ]]; then
-  RUN_ARGS+=(--skip-mcp-setup)
-fi
-
-ensure_node_for_playwright
-ensure_playwright_browsers
-
 echo "==> 启动 workflow"
-echo "    python run.py ${RUN_ARGS[*]}"
+echo "    $VENV_PY run.py ${RUN_ARGS[*]}"
 echo
 
-exec python run.py "${RUN_ARGS[@]}"
+exec "$VENV_PY" run.py "${RUN_ARGS[@]}"

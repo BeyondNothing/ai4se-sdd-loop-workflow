@@ -24,6 +24,8 @@ class PhaseConfig:
     next_node: str
     min_body_chars: int = 120
     requires_approval: bool = True
+    # True：允许 clarification_checklist 仍有 pending（留给下游 review 澄清）
+    allow_unresolved_checklist: bool = False
 
 
 def draft_dir(docs_dir: Path) -> Path:
@@ -74,6 +76,7 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
         next_node="review_plan_and_tests",
         min_body_chars=200,
         requires_approval=False,
+        allow_unresolved_checklist=True,
     ),
     "design_test_cases": PhaseConfig(
         node_id="design_test_cases",
@@ -84,6 +87,7 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
         next_node="review_plan_and_tests",
         min_body_chars=200,
         requires_approval=False,
+        allow_unresolved_checklist=True,
     ),
     "review_plan_and_tests": PhaseConfig(
         node_id="review_plan_and_tests",
@@ -125,7 +129,8 @@ def _checklist_ready(content: str, state: DevWorkflowState) -> bool:
 
 def _validate_requirements_final(content: str) -> bool:
     metadata = parse_requirement_metadata(content)
-    return bool(metadata.requirement_type and metadata.requirement_type != "unknown")
+    # 仅接受规范化后的 new | existing_change（见 requirement_parser 别名表）
+    return metadata.requirement_type in ("new", "existing_change")
 
 
 def _validate_generic_final(content: str, cfg: PhaseConfig) -> bool:
@@ -146,7 +151,10 @@ CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
 
 
 def phase_content_ready(docs_dir: Path, node_id: str, state: DevWorkflowState) -> bool:
-    """定稿 md 结构完整（澄清清单 + 正文），不要求用户确认。"""
+    """定稿 md 结构完整（正文达标）；默认还要求澄清清单已消解。
+
+    create_plan / design_test_cases 可带 pending 进入 review（allow_unresolved_checklist）。
+    """
     cfg = PHASE_CONFIGS.get(node_id)
     if not cfg:
         return False
@@ -156,7 +164,7 @@ def phase_content_ready(docs_dir: Path, node_id: str, state: DevWorkflowState) -
         return False
 
     content = final_path.read_text(encoding="utf-8")
-    if not _checklist_ready(content, state):
+    if not cfg.allow_unresolved_checklist and not _checklist_ready(content, state):
         return False
 
     validator = CONTENT_VALIDATORS.get(node_id, _validate_generic_final)
@@ -183,6 +191,9 @@ def phase_complete(docs_dir: Path, node_id: str, state: DevWorkflowState) -> boo
     cfg = PHASE_CONFIGS.get(node_id)
     if cfg and not cfg.requires_approval:
         return True
+    # --auto：内容就绪即过门禁，不等人写 approved
+    if state.get("auto"):
+        return True
     return phase_user_approved(docs_dir, node_id)
 
 
@@ -196,6 +207,8 @@ def review_plan_tests_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
     """Review 节点完成：review 定稿确认，且 plan / test-cases 均已同步并确认。"""
     if not phase_complete(docs_dir, "review_plan_and_tests", state):
         return False
+    if state.get("auto"):
+        return True
     return phase_user_approved(docs_dir, "create_plan") and phase_user_approved(
         docs_dir, "design_test_cases"
     )

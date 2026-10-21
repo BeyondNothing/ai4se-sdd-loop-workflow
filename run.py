@@ -12,7 +12,6 @@ PROJECT_ROOT = Path(__file__).parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.workflow import DevWorkflow  # noqa: E402
-from src.mcp import ensure_mcp_for_agents  # noqa: E402
 from src.config_loader import load_workflow_config  # noqa: E402
 from src.requirement_dir import resolve_app_root, resolve_docs_path  # noqa: E402
 
@@ -39,12 +38,12 @@ def main():
     parser.add_argument(
         "--name", "-n",
         default=None,
-        help="需求目录名（默认从文件名或需求首行推导），产出落在 <应用根>/docs/<name>/",
+        help="需求目录名（默认从文件名或需求首行推导），产出落在 <应用根>/<docs_dir>/<name>/",
     )
     parser.add_argument(
         "--docs-dir",
         default=None,
-        help="覆盖完整产出目录（相对应用根或绝对路径；默认 <应用根>/docs/<需求名>/）",
+        help="覆盖完整产出目录（相对应用根或绝对路径；默认 <应用根>/<docs_dir>/<需求名>/）",
     )
     parser.add_argument(
         "--config",
@@ -63,14 +62,14 @@ def main():
         help="跳过需求澄清 loop（适用于 echo 调试或非交互场景）",
     )
     parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="无人值守：禁止向用户提问，内容就绪后自动过审批门禁（隐含 --skip-clarification）",
+    )
+    parser.add_argument(
         "--fresh",
         action="store_true",
         help="清除该需求目录下已有产出（保留 00-requirement.md），从头开始",
-    )
-    parser.add_argument(
-        "--skip-mcp-setup",
-        action="store_true",
-        help="跳过 Playwright MCP 自动配置（调试用）",
     )
     args = parser.parse_args()
     wf_cfg = load_workflow_config(args.config)
@@ -101,7 +100,7 @@ def main():
             if named_sample.is_file():
                 source_file = named_sample
                 requirement = named_sample.read_text(encoding="utf-8")
-                logging.info("从 docs/requirements 读取需求: %s", named_sample)
+                logging.info("从 %s/requirements 读取需求: %s", wf_cfg.docs_dir, named_sample)
 
     if requirement is None:
         default_sample = app_root / wf_cfg.docs_dir / "requirements" / "jwt-login-requirement.md"
@@ -110,24 +109,9 @@ def main():
             requirement = default_sample.read_text(encoding="utf-8")
             logging.info("未传需求，使用默认: %s", default_sample)
         else:
-            parser.error("请提供 requirement、--file，或 --name（且 docs/<name>/00-requirement.md 已存在）")
-
-    if not args.skip_mcp_setup:
-        if wf_cfg.e2e_enabled:
-            mcp_result = ensure_mcp_for_agents(
-                PROJECT_ROOT,
-                e2e_headless=wf_cfg.e2e_headless,
-            )
-            logging.info(
-                "MCP 已同步 (servers=%s, headless=%s, cursor=%s, omp=%s)",
-                mcp_result.get("servers", []),
-                wf_cfg.e2e_headless,
-                ", ".join(mcp_result.get("cursor_mcp_files", [])),
-                ", ".join(mcp_result.get("omp_mcp_files", [])),
-            )
-        else:
-            logging.info(
-                "E2E 已关闭 (workflow.e2e.enabled=false)，跳过 Playwright MCP 配置"
+            parser.error(
+                "请提供 requirement、--file，或 --name"
+                f"（且 {wf_cfg.docs_dir}/<name>/00-requirement.md 已存在）"
             )
 
     workflow = DevWorkflow(PROJECT_ROOT, args.config)
@@ -142,6 +126,7 @@ def main():
         name=args.name,
         source_file=source_file,
         skip_clarification=args.skip_clarification,
+        auto=args.auto,
         fresh=args.fresh,
     )
 

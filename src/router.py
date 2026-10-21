@@ -30,7 +30,8 @@ logger = logging.getLogger(__name__)
 
 # 产出文件检查顺序：越靠前表示流程越靠后
 RESUME_CHECKPOINTS: list[tuple[str, str | None]] = [
-    ("05-test-report.md", None),
+    ("06-ai-review.md", None),
+    ("05-test-report.md", "ai_review"),
     ("04-implementation.md", "verify_tests"),
     ("03-tasks.md", "implement_code"),
     ("02-plan-test-review.md", "split_tasks"),
@@ -50,6 +51,7 @@ ROUTABLE_NODES = frozenset(
         "split_tasks",
         "implement_code",
         "verify_tests",
+        "ai_review",
     }
 )
 
@@ -58,13 +60,21 @@ _LEGACY_NODE_ALIASES = {
 }
 
 
-def determine_start_node(docs_dir: Path, *, skip_clarification: bool = False) -> str:
+def _gate_state(*, skip_clarification: bool = False, auto: bool = False) -> dict:
+    return {"skip_clarification": skip_clarification or auto, "auto": auto}
+
+
+def determine_start_node(
+    docs_dir: Path, *, skip_clarification: bool = False, auto: bool = False
+) -> str:
     """根据 docs 目录已有 md 决定启动节点（仅启动时调用一次）。"""
     if not docs_dir.is_dir():
         return "analyze_requirements"
 
     if not (docs_dir / "03-tasks.md").exists():
-        plan_tests_start = _resolve_plan_tests_phase_start(docs_dir, skip_clarification)
+        plan_tests_start = _resolve_plan_tests_phase_start(
+            docs_dir, skip_clarification, auto=auto
+        )
         if plan_tests_start:
             logger.info("续跑：plan/test 阶段 → 从节点 %s 开始", plan_tests_start)
             return plan_tests_start
@@ -74,13 +84,17 @@ def determine_start_node(docs_dir: Path, *, skip_clarification: bool = False) ->
         if not path.exists():
             continue
 
-        start = _resolve_from_file(path, filename, skip_clarification=skip_clarification)
+        start = _resolve_from_file(
+            path, filename, skip_clarification=skip_clarification, auto=auto
+        )
         if start:
             logger.info("续跑：基于 %s → 从节点 %s 开始", filename, start)
             return _normalize_start_node(start)
 
         if fallback_node:
-            adjusted = _adjust_fallback(filename, fallback_node, path.parent, skip_clarification)
+            adjusted = _adjust_fallback(
+                filename, fallback_node, path.parent, skip_clarification, auto=auto
+            )
             logger.info("续跑：发现 %s（无状态表）→ 从 %s 开始", filename, adjusted)
             return _normalize_start_node(adjusted)
 
@@ -91,9 +105,11 @@ def _normalize_start_node(node: str) -> str:
     return _LEGACY_NODE_ALIASES.get(node, node)
 
 
-def _resolve_plan_tests_phase_start(docs_dir: Path, skip_clarification: bool) -> str | None:
+def _resolve_plan_tests_phase_start(
+    docs_dir: Path, skip_clarification: bool, *, auto: bool = False
+) -> str | None:
     """03-tasks 之前：plan + test-cases + review 阶段的续跑入口。"""
-    state = {"skip_clarification": skip_clarification}
+    state = _gate_state(skip_clarification=skip_clarification, auto=auto)
     review_path = docs_dir / "02-plan-test-review.md"
     plan_path = docs_dir / "02-plan.md"
     tests_path = docs_dir / "02-test-cases.md"
@@ -113,14 +129,16 @@ def _resolve_plan_tests_phase_start(docs_dir: Path, skip_clarification: bool) ->
 
 
 def is_workflow_complete(docs_dir: Path) -> bool:
-    path = docs_dir / "05-test-report.md"
+    path = docs_dir / "06-ai-review.md"
     if not path.exists():
         return False
     status = parse_workflow_status_file(path)
     return bool(status and status.status == "completed" and not status.next_node)
 
 
-def restore_state_from_docs(docs_dir: Path, skip_clarification: bool) -> dict:
+def restore_state_from_docs(
+    docs_dir: Path, skip_clarification: bool, *, auto: bool = False
+) -> dict:
     """从 md 恢复澄清清单、元数据、确认状态等 state 字段。"""
     restored: dict = {}
 
@@ -173,16 +191,23 @@ def restore_state_from_docs(docs_dir: Path, skip_clarification: bool) -> dict:
         else:
             restored["test_passed"] = parse_test_passed(report_text)
 
-    if skip_clarification:
+    if skip_clarification or auto:
         restored["skip_clarification"] = True
+    if auto:
+        restored["auto"] = True
 
     return restored
 
 
 def _adjust_fallback(
-    filename: str, fallback_node: str, docs_dir: Path, skip_clarification: bool
+    filename: str,
+    fallback_node: str,
+    docs_dir: Path,
+    skip_clarification: bool,
+    *,
+    auto: bool = False,
 ) -> str:
-    state = {"skip_clarification": skip_clarification}
+    state = _gate_state(skip_clarification=skip_clarification, auto=auto)
     if filename == "01-requirements.md":
         if not requirements_complete(docs_dir, state):
             return "analyze_requirements"
@@ -205,14 +230,22 @@ def _adjust_fallback(
     return fallback_node
 
 
-def _resolve_from_file(path: Path, filename: str, *, skip_clarification: bool) -> str | None:
+def _resolve_from_file(
+    path: Path, filename: str, *, skip_clarification: bool, auto: bool = False
+) -> str | None:
     status = parse_workflow_status_file(path)
     if status:
         return _resolve_from_status(
-            status, filename, docs_dir=path.parent, skip_clarification=skip_clarification
+            status,
+            filename,
+            docs_dir=path.parent,
+            skip_clarification=skip_clarification,
+            auto=auto,
         )
 
-    return _infer_without_status(path, filename, skip_clarification=skip_clarification)
+    return _infer_without_status(
+        path, filename, skip_clarification=skip_clarification, auto=auto
+    )
 
 
 def _resolve_from_status(
@@ -221,11 +254,12 @@ def _resolve_from_status(
     *,
     docs_dir: Path,
     skip_clarification: bool,
+    auto: bool = False,
 ) -> str | None:
     if status.status in ("in_progress", "failed") and status.node in ROUTABLE_NODES:
         return status.node
 
-    state = {"skip_clarification": skip_clarification}
+    state = _gate_state(skip_clarification=skip_clarification, auto=auto)
     if status.next_node in ROUTABLE_NODES:
         if filename == "01-requirements.md" and status.next_node in (
             "create_plan",
@@ -241,11 +275,15 @@ def _resolve_from_status(
                 return "split_tasks"
         return status.next_node
 
-    if status.status == "completed" and not status.next_node and filename == "05-test-report.md":
+    if status.status == "completed" and not status.next_node and filename == "06-ai-review.md":
         return None
 
     return _infer_from_status_fields(
-        status, filename, docs_dir=docs_dir, skip_clarification=skip_clarification
+        status,
+        filename,
+        docs_dir=docs_dir,
+        skip_clarification=skip_clarification,
+        auto=auto,
     )
 
 
@@ -255,11 +293,13 @@ def _infer_from_status_fields(
     *,
     docs_dir: Path,
     skip_clarification: bool,
+    auto: bool = False,
 ) -> str | None:
-    state = {"skip_clarification": skip_clarification}
+    state = _gate_state(skip_clarification=skip_clarification, auto=auto)
+    skip = skip_clarification or auto
 
     if filename.endswith("01-requirements.draft.md") or filename == "01-requirements.md":
-        if status.pending_count > 0 and not skip_clarification:
+        if status.pending_count > 0 and not skip:
             return "analyze_requirements"
         if requirements_complete(docs_dir, state):
             return "parallel_plan_and_tests"
@@ -268,7 +308,9 @@ def _infer_from_status_fields(
         return "analyze_requirements"
 
     if filename == "02-plan.md" or filename == "02-test-cases.md":
-        return _resolve_plan_tests_phase_start(docs_dir, skip_clarification)
+        return _resolve_plan_tests_phase_start(
+            docs_dir, skip_clarification, auto=auto
+        )
 
     if filename == "02-plan-test-review.md":
         if review_plan_tests_complete(docs_dir, state):
@@ -283,17 +325,20 @@ def _infer_from_status_fields(
     return None
 
 
-def _infer_without_status(path: Path, filename: str, *, skip_clarification: bool) -> str | None:
+def _infer_without_status(
+    path: Path, filename: str, *, skip_clarification: bool, auto: bool = False
+) -> str | None:
     content = path.read_text(encoding="utf-8")
     checklist = parse_clarification_checklist(content)
     pending = len(checklist.pending_items())
-    state = {"skip_clarification": skip_clarification}
+    state = _gate_state(skip_clarification=skip_clarification, auto=auto)
+    skip = skip_clarification or auto
 
     if filename.endswith("01-requirements.draft.md"):
         return "analyze_requirements"
 
     if filename == "01-requirements.md":
-        if pending > 0 and not skip_clarification:
+        if pending > 0 and not skip:
             return "analyze_requirements"
         if requirements_complete(path.parent, state):
             return "parallel_plan_and_tests"
@@ -305,7 +350,9 @@ def _infer_without_status(path: Path, filename: str, *, skip_clarification: bool
         return "analyze_requirements"
 
     if filename in ("02-plan.md", "02-test-cases.md", "02-plan-test-review.md"):
-        return _resolve_plan_tests_phase_start(path.parent, skip_clarification)
+        return _resolve_plan_tests_phase_start(
+            path.parent, skip_clarification, auto=auto
+        )
 
     if filename == "03-tasks.md":
         if phase_complete(path.parent, "split_tasks", state):

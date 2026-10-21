@@ -36,7 +36,7 @@ from ..state import DevWorkflowState
 logger = logging.getLogger(__name__)
 
 _PHASE_NODE_IDS = frozenset(PHASE_CONFIGS.keys())
-_CODE_WORK_NODES = frozenset({"implement_code", "verify_tests"})
+_CODE_WORK_NODES = frozenset({"implement_code", "verify_tests", "ai_review"})
 
 
 class NodeRunner:
@@ -50,9 +50,17 @@ class NodeRunner:
         node_cfg = self.workflow_config.nodes[node_id]
         docs_dir = self._resolve_docs_dir(state)
 
-        prompt_template = self._load_prompt(node_cfg.prompt_file)
+        auto = bool(state.get("auto"))
+        prompt_rel = node_cfg.resolve_prompt_file(auto)
+        prompt_template = self._load_prompt(prompt_rel)
         context = self._build_context(node_cfg, state, docs_dir)
         prompt = self._render_prompt(prompt_template, context)
+        logger.info(
+            "节点 [%s] 使用 prompt %s（%s）",
+            node_cfg.name,
+            prompt_rel,
+            "无人值守" if auto else "人工介入",
+        )
 
         tool = get_ai_tool(node_cfg.tool)
         agent_cwd = self._agent_cwd(node_id)
@@ -89,6 +97,14 @@ class NodeRunner:
                 node_id=node_id,
                 prompt_dir=str(docs_dir),
             )
+            # 交互结束仍未过门禁时打日志，避免「已 approved 却停住」难排查
+            if node_id in _PHASE_NODE_IDS and not completion_check():
+                logger.warning(
+                    "节点 [%s] 交互已结束，但阶段门禁未通过"
+                    "（内容结构/requirement_type/approval 等仍不满足 phase_complete）；"
+                    "将进入 END，续跑前请检查定稿 YAML",
+                    node_cfg.name,
+                )
             content, result = self._resolve_interactive_content(
                 docs_dir, output_path, node_id, result
             )
@@ -396,6 +412,7 @@ class NodeRunner:
             "split_tasks": "tasks",
             "implement_code": "implement",
             "verify_tests": "verify",
+            "ai_review": "ai_review",
         }
         phase = phase_labels.get(node_id, node_id)
         next_node = ""
@@ -410,6 +427,8 @@ class NodeRunner:
         elif node_id == "implement_code":
             next_node = "verify_tests"
         elif node_id == "verify_tests":
+            next_node = "ai_review"
+        elif node_id == "ai_review":
             next_node = ""
 
         if skip and node_id == "analyze_requirements" and phase_complete(
@@ -481,15 +500,6 @@ class NodeRunner:
                 else "否 — 初稿有待澄清/待决策项时，必须在会话中与用户确认。"
             ),
         }
-
-        if node_cfg.node_id == "verify_tests":
-            context["e2e_base_url"] = self.workflow_config.e2e_base_url.rstrip("/")
-            context["e2e_enabled"] = (
-                "true" if self.workflow_config.e2e_enabled else "false"
-            )
-            context["e2e_headless"] = (
-                "true" if self.workflow_config.e2e_headless else "false"
-            )
 
         cfg = get_phase_config(node_cfg.node_id)
         if cfg:

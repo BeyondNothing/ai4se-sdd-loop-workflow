@@ -7,13 +7,28 @@ name = "ai4se-sdd-loop-workflow"
 version = "0.1.0"
 description = "LangGraph workflow: requirement → plan → tasks → code → tests"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.15"
 dependencies = [
     "langgraph>=0.2.0",
     "typing-extensions>=4.0.0",
     "pyyaml>=6.0.0",
     "python-dotenv>=1.0.0",
 ]
+
+[project.scripts]
+# 主命令（macOS / Windows / Linux 通用）
+sddl = "src.cli:main"
+sddl-init = "src.cli:main"
+sddl-start = "src.cli:main"
+# Unix 冒号别名（Windows 因文件名不能含 ':' 通常装不出）
+"sddl:init" = "src.cli:main"
+"sddl:start" = "src.cli:main"
+# 兼容旧命令名
+sdd-loop-workflow = "src.cli:main"
+sdd-loop-workflow-init = "src.cli:main"
+sdd-loop-workflow-start = "src.cli:main"
+"sdd-loop-workflow:init" = "src.cli:main"
+"sdd-loop-workflow:start" = "src.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

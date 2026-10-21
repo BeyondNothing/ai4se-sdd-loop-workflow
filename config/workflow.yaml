@@ -1,10 +1,15 @@
+# 引擎节点编排（tool / mode / prompt / inputs）。
+# docs_dir 等业务运行时配置已迁到业务根：
+#   <业务根>/sdd-loop-workflow-config/workflow.yaml
+# 由 sddl init 生成。
+#
+# prompt      = 人工介入（需用户澄清 / review）
+# prompt_auto = 无人值守（--auto）；Python 按 flag 二选一注入，勿在同一文件里写条件分支
+#
+# 兼容兜底（仅当业务侧尚未 init 时使用）：
 workflow:
-  docs_dir: docs
-  app_root: ..          # 应用项目根（相对本仓库根目录）
-  e2e:
-    enabled: true   # false 时跳过浏览器 E2E（verify_tests 仍执行单元/API 测试）
-    headless: false # false=有界面（默认弹出 Chrome）；true=无界面 headless
-    base_url: http://localhost:8080
+  docs_dir: spec
+  app_root: ..
 
 nodes:
   analyze_requirements:
@@ -12,6 +17,7 @@ nodes:
     tool: cursor
     mode: interactive
     prompt: prompts/01_requirements.md
+    prompt_auto: prompts/01_requirements.auto.md
     output: 01-requirements.md
     inputs:
       - state: requirement
@@ -23,6 +29,7 @@ nodes:
     tool: cursor
     mode: headless
     prompt: prompts/02_create_plan.md
+    prompt_auto: prompts/02_create_plan.auto.md
     output: 02-plan.md
     inputs:
       - doc: 01-requirements.md
@@ -37,6 +44,7 @@ nodes:
     tool: cursor
     mode: headless
     prompt: prompts/02_design_test_cases.md
+    prompt_auto: prompts/02_design_test_cases.auto.md
     output: 02-test-cases.md
     inputs:
       - doc: 01-requirements.md
@@ -50,6 +58,7 @@ nodes:
     tool: cursor
     mode: interactive
     prompt: prompts/02_review_plan_and_tests.md
+    prompt_auto: prompts/02_review_plan_and_tests.auto.md
     output: 02-plan-test-review.md
     inputs:
       - doc: 01-requirements.md
@@ -68,6 +77,7 @@ nodes:
     tool: cursor
     mode: interactive
     prompt: prompts/03_split_tasks.md
+    prompt_auto: prompts/03_split_tasks.auto.md
     output: 03-tasks.md
     inputs:
       - doc: 01-requirements.md
@@ -85,6 +95,7 @@ nodes:
     tool: cursor
     mode: interactive
     prompt: prompts/04_implement_code.md
+    prompt_auto: prompts/04_implement_code.auto.md
     output: 04-implementation.md
     inputs:
       - doc: 01-requirements.md
@@ -100,8 +111,18 @@ nodes:
     tool: cursor
     mode: interactive
     prompt: prompts/05_verify_tests.md
+    prompt_auto: prompts/05_verify_tests.auto.md
     output: 05-test-report.md
     inputs:
       - doc: 02-test-cases.md
       - doc: 03-tasks.md
       - doc: 04-implementation.md
+
+  ai_review:
+    name: AI 代码评审
+    tool: cursor
+    mode: interactive
+    prompt: prompts/06_ai_review.md
+    prompt_auto: prompts/06_ai_review.auto.md
+    output: 06-ai-review.md
+    inputs: []

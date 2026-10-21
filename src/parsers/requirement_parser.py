@@ -10,9 +10,13 @@ REQUIREMENT_TYPE_ALIASES = {
     "new": "new",
     "新需求": "new",
     "existing_change": "existing_change",
+    "existing_baseline": "existing_change",  # 固化现有行为 / 验收基线
+    "baseline": "existing_change",
     "老需求调整": "existing_change",
+    "老需求固化": "existing_change",
     "存量需求调整": "existing_change",
     "需求调整": "existing_change",
+    "固化": "existing_change",
 }
 
 RISK_ALIASES = {
