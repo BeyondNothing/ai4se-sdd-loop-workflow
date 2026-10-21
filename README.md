@@ -13,7 +13,18 @@ CLI 短命令：`sddl` / `sddl:init` / `sddl:start`（旧名 `sdd-loop-workflow*
 ```bash
 git clone <本仓库地址>
 cd ai4se-sdd-loop-workflow
+
+# 推荐：一键初始化环境（venv + pip≥21.3 + pip install -e .）
+./init_env.sh          # macOS / Linux / Git Bash
+# Windows:  .\init_env.cmd
+# 强制重建: ./init_env.sh --force   或  .\init_env.cmd --force
+```
+
+也可手动：
+
+```bash
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python -m pip install -U "pip>=21.3"                 # editable 安装必须 pip ≥ 21.3
 pip install -e .
 ```
 
@@ -34,7 +45,7 @@ sddl:start --tool cursor --name login             # 续跑，勿加 --fresh
 | `--fresh` | 清空该需求产出后重来 |
 | `--tool` | `cursor` / `claude_code` / `omp` / `echo` |
 
-需要 Python 3.10+ 和已登录的 AI CLI。
+需要 Python 3.10+、**pip ≥ 21.3** 和已登录的 AI CLI。Windows 上若 `pip install -e .` 报错，在引擎目录执行 `.\init_env.cmd`（必要时 `--force`）；脚本会建 venv、升级 pip/setuptools/wheel 再装包。
 
 ---
 
