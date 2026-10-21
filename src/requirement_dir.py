@@ -60,7 +60,7 @@ def resolve_app_root(workflow_root: Path, app_root: str | None = None) -> Path:
     workflow_root: 编排仓库根目录（本仓库）
     app_root: 配置值，相对 workflow_root 或绝对路径；默认 ``..``（上级目录）
 
-    若设置了环境变量 ``SDD_LOOP_WORKFLOW_APP_ROOT``（sdd-loop-workflow:start 会写入运行时 cwd），
+    若设置了环境变量 ``SDD_LOOP_WORKFLOW_APP_ROOT``（sddl:start 会写入运行时 cwd），
     则优先用它，便于在任意目录启动并绑定到当前业务项目。
     """
     import os

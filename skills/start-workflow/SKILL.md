@@ -16,7 +16,7 @@ description: >-
 
 ## 硬性约束（必须遵守）
 
-1. **禁止**在当前 AI session 里用 Shell / 终端工具执行 `sdd-loop-workflow:start`（或 `start.sh` / `start.cmd`）。
+1. **禁止**在当前 AI session 里用 Shell / 终端工具执行 `sddl:start`（或 `start.sh` / `start.cmd`）。
 2. **禁止**为「续跑」「审批后继续」再次拼装/执行启动命令；审批通过后由**已在外部终端运行的** Python 进程自动续跑。
 3. 准备完成后：展示**一条完整可复制命令**，说明在外部终端执行，然后停止（不要调用执行类工具）。
 
@@ -49,7 +49,7 @@ description: >-
 在业务项目根执行（cwd = `app_root`）。先写死基底：
 
 ```bash
-sdd-loop-workflow:start --tool {tool} --file "<PRD 绝对路径>"
+sddl:start --tool {tool} --file "<PRD 绝对路径>"
 ```
 
 再**扫一遍对话/skill 输入**，按下面规则追加参数（能推断就加，不要逐项问用户「要不要加 xxx」）：
@@ -87,11 +87,11 @@ sdd-loop-workflow:start --tool {tool} --file "<PRD 绝对路径>"
 示例（普通）：
 
 ```bash
-sdd-loop-workflow:start --tool {tool} --file "/absolute/path/to/prd.md" --name login
+sddl:start --tool {tool} --file "/absolute/path/to/prd.md" --name login
 ```
 
 示例（无人值守 + 加速）：
 
 ```bash
-sdd-loop-workflow:start --tool {tool} --file "/absolute/path/to/prd.md" --name login --auto --skip-install
+sddl:start --tool {tool} --file "/absolute/path/to/prd.md" --name login --auto --skip-install
 ```

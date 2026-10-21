@@ -79,7 +79,7 @@ def load_ai_rules_config(app_root: Path) -> tuple[str, dict[str, list[str]]]:
     if not path.is_file():
         logger.warning(
             "未找到 %s，各节点将不注入扩展规则"
-            "（请在业务项目根执行 sdd-loop-workflow:init）",
+            "（请在业务项目根执行 sddl:init）",
             path,
         )
         return DEFAULT_AI_RULES_SUBDIR, {}
@@ -109,7 +109,7 @@ def load_app_runtime_settings(app_root: Path) -> dict[str, Any]:
     if not path.is_file():
         logger.warning(
             "未找到 %s，将使用引擎 config/workflow.yaml 中的兜底 docs_dir"
-            "（请在业务项目根执行 sdd-loop-workflow:init）",
+            "（请在业务项目根执行 sddl:init）",
             path,
         )
         return {}
@@ -172,7 +172,7 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
     return WorkflowConfig(
         docs_dir=docs_dir,
         ai_rules_dir=ai_rules_dir,
-        # app_root 仍作引擎侧兜底；sdd-loop-workflow:start 用环境变量覆盖
+        # app_root 仍作引擎侧兜底；sddl:start 用环境变量覆盖
         app_root=fallback_app_root,
         nodes=nodes,
     )

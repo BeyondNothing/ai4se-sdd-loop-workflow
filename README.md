@@ -2,7 +2,9 @@
 
 从**需求 → 计划/用例 → 评审 → 任务 → 代码 → 测试 → AI Review**的工程化 Workflow。配置和产出写在业务项目里。
 
-**快速接入、可按项目扩展**：业务侧 `init` 即可用，规范与规则落在 `sdd-loop-workflow-config/`，不必改引擎；需要时再通过扩展 rule、prompt 与节点编排加深定制。
+**快速接入、可按项目扩展**：业务侧 `sddl:init` 即可用，规范与规则落在 `sdd-loop-workflow-config/`，不必改引擎；需要时再通过扩展 rule、prompt 与节点编排加深定制。
+
+CLI 短命令：`sddl` / `sddl:init` / `sddl:start`（旧名 `sdd-loop-workflow*` 仍可用）。
 
 ---
 
@@ -18,10 +20,10 @@ pip install -e .
 装好后可在各个业务项目根目录直接用：
 
 ```bash
-sdd-loop-workflow:init
-sdd-loop-workflow:start --tool cursor --file "/path/to/prd.md" --name login
-sdd-loop-workflow:start --tool cursor --name login --auto      # 无人值守
-sdd-loop-workflow:start --tool cursor --name login             # 续跑，勿加 --fresh
+sddl:init
+sddl:start --tool cursor --file "/path/to/prd.md" --name login
+sddl:start --tool cursor --name login --auto      # 无人值守
+sddl:start --tool cursor --name login             # 续跑，勿加 --fresh
 ```
 
 | 开关 | 作用 |
@@ -57,11 +59,11 @@ your-project/
 
 ### `start-workflow` skill 用在什么时候
 
-`init` 会把该 skill 装到业务项目的 AI 技能目录。在对话里触发它，只做两件事：**落本地需求文件** + **拼好启动命令**；真正跑 workflow 必须你自己在**终端**执行。
+`sddl:init` 会把该 skill 装到业务项目的 AI 技能目录。在对话里触发它，只做两件事：**落本地需求文件** + **拼好 `sddl:start ...` 命令**；真正跑 workflow 必须你自己在**终端**执行。
 
 | 场景 | 你怎么说 | skill 做什么 |
 |------|----------|--------------|
-| 本地已有 PRD | 给出文件路径 | 校验路径存在，直接拼 `sdd-loop-workflow:start --file ...` |
+| 本地已有 PRD | 给出文件路径 | 校验路径存在，直接拼 `sddl:start --file ...` |
 | 需求在外部系统（Jira、Colla 等） | 告诉**卡号 / 需求标识** | 按项目已配置的 **MCP** 拉取正文 → 写入本地（如 `docs/requirements/<标识>.md`）→ 再拼启动命令 |
 | 两边都没有 | — | 先问你要路径或外部来源，不瞎拼命令 |
 
@@ -104,16 +106,16 @@ your-project/
 
 | 情况 | 做法 |
 |------|------|
-| 编排进程还在跑（终端未退出） | 在对话里完成澄清/审批即可，**进程会自动进下一节点**；不要再执行一遍 `start` |
-| 进程已退出 / 中断 / 换机器 | 用**同一个** `--name` 再执行 `start`（可带原 `--file`）；**不要**加 `--fresh` |
-| 整条链路已完成（存在完成态的 `06-ai-review.md`） | 再 `start` 会直接判定已完成；要推倒重来才加 `--fresh`（会清空该需求下除原始需求外的 md 产出） |
+| 编排进程还在跑（终端未退出） | 在对话里完成澄清/审批即可，**进程会自动进下一节点**；不要再执行一遍 `sddl:start` |
+| 进程已退出 / 中断 / 换机器 | 用**同一个** `--name` 再执行 `sddl:start`（可带原 `--file`）；**不要**加 `--fresh` |
+| 整条链路已完成（存在完成态的 `06-ai-review.md`） | 再 `sddl:start` 会直接判定已完成；要推倒重来才加 `--fresh`（会清空该需求下除原始需求外的 md 产出） |
 
 ```bash
 # 续跑（推荐始终带上 --name，与首次一致）
-sdd-loop-workflow:start --tool cursor --name login
+sddl:start --tool cursor --name login
 
 # 仅当明确要清空该需求产出、从头再来
-sdd-loop-workflow:start --tool cursor --file "/path/to/prd.md" --name login --fresh
+sddl:start --tool cursor --file "/path/to/prd.md" --name login --fresh
 ```
 
 ### 依据什么定位断点
@@ -140,7 +142,7 @@ sdd-loop-workflow:start --tool cursor --file "/path/to/prd.md" --name login --fr
 
 ## 5. 业务配置说明（`sdd-loop-workflow-config/`）
 
-`init` 生成后改这里即可按项目定制，**不必改引擎**。
+`sddl:init` 生成后改这里即可按项目定制，**不必改引擎**。
 
 ### `workflow.yaml` — 运行时目录
 
