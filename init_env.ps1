@@ -1,6 +1,9 @@
-# init_env.ps1 — 仅初始化本地环境（venv + pip≥21.3 + editable 安装），不启动 workflow
+﻿# init_env.ps1 — 仅初始化本地环境（venv + pip>=21.3 + editable 安装），不启动 workflow
 # 本文件须以 UTF-8 BOM 保存，Windows PowerShell 5.1 才能正确解析中文。
 # 推荐入口: .\init_env.cmd
+#
+# 注意: 不要把含 % / if 等的 Python 代码塞进 PowerShell 双引号 -c 字符串，
+# 否则 PS 5.1 会当成自己的运算符/关键字解析。版本检查尽量用 PS 解析命令输出。
 $ErrorActionPreference = "Stop"
 try {
     $utf8 = New-Object System.Text.UTF8Encoding $false
@@ -47,20 +50,40 @@ function Die([string]$Message) {
     exit 1
 }
 
-function Resolve-PythonCommand {
-    $candidates = @()
-    if ($env:PYTHON_BIN) { $candidates += $env:PYTHON_BIN }
-    $candidates += @("python3", "python", "py")
-
-    foreach ($name in $candidates) {
-        $cmd = Get-Command $name -ErrorAction SilentlyContinue
-        if (-not $cmd) { continue }
-        if ($name -eq "py") {
-            return @{ File = $cmd.Source; Prefix = @("-3") }
-        }
-        return @{ File = $cmd.Source; Prefix = @() }
+function Test-PythonCandidate($File, [string[]]$Prefix) {
+    # 跳过 Windows 商店占位符（WindowsApps\...python*.exe），否则会弹商店页
+    if ($File -match '(?i)\\WindowsApps\\') { return $false }
+    try {
+        $out = & $File @($Prefix + @("--version")) 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) { return $false }
+        return ($out -match 'Python\s+3\.')
+    } catch {
+        return $false
     }
-    Die "未找到 python / python3 / py，请先安装 Python 3.10+"
+}
+
+function Resolve-PythonCommand {
+    # 同事机器常见：官方安装器提供 python / py；部分环境只有 python3。
+    # Windows 优先 py -3，再 python / python3；并校验 --version，避开商店 stub。
+    $candidates = New-Object System.Collections.Generic.List[object]
+    if ($env:PYTHON_BIN) {
+        $candidates.Add(@{ Name = $env:PYTHON_BIN; Prefix = @() }) | Out-Null
+    }
+    $candidates.Add(@{ Name = "py"; Prefix = @("-3") }) | Out-Null
+    $candidates.Add(@{ Name = "python"; Prefix = @() }) | Out-Null
+    $candidates.Add(@{ Name = "python3"; Prefix = @() }) | Out-Null
+
+    foreach ($c in $candidates) {
+        $cmd = Get-Command $c.Name -ErrorAction SilentlyContinue
+        if (-not $cmd) { continue }
+        $file = $cmd.Source
+        if (-not (Test-PythonCandidate $file $c.Prefix)) { continue }
+        return @{ File = $file; Prefix = $c.Prefix }
+    }
+    Die @"
+未找到可用的 Python 3.10+（已试: py -3 / python / python3）。
+请安装 https://www.python.org/downloads/ （勾选 Add python.exe to PATH），或设置环境变量 PYTHON_BIN 指向 python.exe 全路径。
+"@
 }
 
 function Invoke-Python($Python, [string[]]$PyArgs) {
@@ -68,6 +91,15 @@ function Invoke-Python($Python, [string[]]$PyArgs) {
     if ($LASTEXITCODE -ne 0) {
         throw "python 退出码 $LASTEXITCODE"
     }
+}
+
+function Get-PythonVersionPair($Python) {
+    # 用 --version 输出解析，避免 python -c 里出现 % / if 被 PS 误解析
+    $out = & $Python.File @($Python.Prefix + @("--version")) 2>&1 | Out-String
+    if ($out -match 'Python\s+(\d+)\.(\d+)') {
+        return @{ Major = [int]$Matches[1]; Minor = [int]$Matches[2]; Text = "$($Matches[1]).$($Matches[2])" }
+    }
+    Die "无法解析 Python 版本: $out"
 }
 
 function Test-VenvHealthy([string]$Dir) {
@@ -89,19 +121,17 @@ function Test-VenvHealthy([string]$Dir) {
 }
 
 function Test-PipMeetsMin([string]$Py) {
-    $code = @'
-import sys
-from pip import __version__ as v
-parts = []
-for x in v.split(".")[:2]:
-    digits = "".join(c for c in x if c.isdigit())
-    parts.append(int(digits or "0"))
-while len(parts) < 2:
-    parts.append(0)
-sys.exit(0 if tuple(parts[:2]) >= (21, 3) else 1)
-'@
-    & $Py -c $code 2>$null | Out-Null
-    return ($LASTEXITCODE -eq 0)
+    $out = & $Py -m pip --version 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { return $false }
+    # 例: pip 24.2 from ...
+    if ($out -match 'pip\s+(\d+)\.(\d+)') {
+        $maj = [int]$Matches[1]
+        $min = [int]$Matches[2]
+        if ($maj -gt $MinPipMajor) { return $true }
+        if ($maj -eq $MinPipMajor -and $min -ge $MinPipMinor) { return $true }
+        return $false
+    }
+    return $false
 }
 
 # ---------- parse args ----------
@@ -122,12 +152,11 @@ while ($i -lt $tokens.Count) {
 
 # ---------- python / venv ----------
 $Python = Resolve-PythonCommand
-$pyVersion = & $Python.File @($Python.Prefix + @("-c", "import sys; print('%d.%d' % sys.version_info[:2])"))
-$pyOk = & $Python.File @($Python.Prefix + @("-c", "import sys; print(1 if sys.version_info >= (3, 10) else 0)"))
-if (("$pyOk".Trim()) -ne "1") {
-    Die "需要 Python 3.10+，当前: $pyVersion"
+$ver = Get-PythonVersionPair $Python
+if ($ver.Major -lt 3 -or ($ver.Major -eq 3 -and $ver.Minor -lt 10)) {
+    Die "需要 Python 3.10+，当前: $($ver.Text)"
 }
-Write-Host "==> Python: $($Python.File) ($pyVersion)"
+Write-Host "==> Python: $($Python.File) ($($ver.Text))"
 
 if ($Force -and (Test-Path -LiteralPath $VenvDir)) {
     Write-Host "==> --force：删除虚拟环境 $VenvDir"
@@ -175,14 +204,15 @@ Write-Host "    $pipVer"
 Write-Host "==> 安装 ai4se-sdd-loop-workflow（editable: python -m pip install -e .）"
 & $VenvPython -m pip install -e .
 if ($LASTEXITCODE -ne 0) {
-    Die @"
-pip install -e . 失败。请把完整报错贴出。
-手动排查:
-  `"$VenvPython`" -m pip --version
-  `"$VenvPython`" -m pip install -U `"pip>=21.3`" setuptools wheel
-  `"$VenvPython`" -m pip install -e .
-常见原因: pip < 21.3、用了系统 pip 而不是 venv、路径含特殊字符、网络/代理。
-"@
+    $hint = @(
+        "pip install -e . 失败。请把完整报错贴出。"
+        "手动排查:"
+        "  `"$VenvPython`" -m pip --version"
+        "  `"$VenvPython`" -m pip install -U `"pip>=21.3`" setuptools wheel"
+        "  `"$VenvPython`" -m pip install -e ."
+        "常见原因: pip < 21.3、用了系统 pip 而不是 venv、路径含特殊字符、网络/代理。"
+    ) -join [Environment]::NewLine
+    Die $hint
 }
 
 Write-Host ""
