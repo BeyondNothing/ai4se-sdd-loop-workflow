@@ -18,7 +18,7 @@ usage() {
 
 作用:
   创建/修复 .venv，将 pip 升到 ≥ 21.3，再执行 pip install -e .
-  不启动 workflow（启动请用 ./start.sh 或 sddl:start）
+  不启动 workflow（启动请用 ./start.sh 或 sddl start）
 
 选项:
   --force   强制删除并重建虚拟环境
@@ -124,5 +124,5 @@ if [[ -f "$VENV_DIR/bin/activate" ]]; then
 else
   echo "    激活: $VENV_DIR\\Scripts\\activate"
 fi
-echo "    业务项目根执行: sddl:init"
-echo "    启动 workflow:   sddl:start ...  或  ./start.sh ..."
+echo "    业务项目根执行: sddl init"
+echo "    启动 workflow:   sddl start ...  或  ./start.sh ..."

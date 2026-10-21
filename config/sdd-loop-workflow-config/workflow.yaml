@@ -2,10 +2,10 @@
 # SDD Loop Workflow — 业务项目运行时配置
 # =============================================================================
 # 位置：业务项目根 / sdd-loop-workflow-config / workflow.yaml
-# （由 sddl:init 生成；按本仓库修改即可。）
+# （由 sddl init 生成；按本仓库修改即可。）
 #
 # 业务项目根默认 = 本文件所在目录的上一级。
-# 使用 sddl:start 时，还会用启动时的 cwd（写入环境变量），
+# 使用 sddl start 时，还会用启动时的 cwd（写入环境变量），
 # 二者一致时无需再配 app_root。
 #
 # 节点 tool / prompt / mode 仍在引擎仓库 config/workflow.yaml，不要写在这里。

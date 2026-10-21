@@ -1,7 +1,7 @@
 # 引擎节点编排（tool / mode / prompt / inputs）。
 # docs_dir 等业务运行时配置已迁到业务根：
 #   <业务根>/sdd-loop-workflow-config/workflow.yaml
-# 由 sddl:init 生成。
+# 由 sddl init 生成。
 #
 # prompt      = 人工介入（需用户澄清 / review）
 # prompt_auto = 无人值守（--auto）；Python 按 flag 二选一注入，勿在同一文件里写条件分支

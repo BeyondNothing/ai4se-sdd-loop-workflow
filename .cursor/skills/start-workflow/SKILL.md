@@ -15,14 +15,14 @@ description: >-
 
 ## 硬性约束（必须遵守）
 
-1. **禁止**在当前 AI session 里用 Shell / 终端工具执行 `sddl:start`（或 `start.sh` / `start.cmd`）。
+1. **禁止**在当前 AI session 里用 Shell / 终端工具执行 `sddl start`（或 `start.sh` / `start.cmd`）。
 2. **禁止**为「续跑」「审批后继续」再次执行或再次拼装启动命令去跑；审批通过后由**已在外部终端运行的** Python 进程自动进入下一节点。
 3. 准备完成后：把**完整可复制命令**展示给用户，并明确说明执行方式（见第 2 节）。
 
 业务项目根执行时，cwd 会作为 `app_root`。命令模板：
 
 ```bash
-sddl:start --tool cursor --file "<PRD 绝对路径>"
+sddl start --tool cursor --file "<PRD 绝对路径>"
 ```
 
 `--file` 必须是已存在文件的绝对路径。用户要求指定产出目录名时再加 `--name <目录名>`。用户明确要求重来时才加 `--fresh`。
@@ -70,7 +70,7 @@ sddl:start --tool cursor --file "<PRD 绝对路径>"
 示例回复形态：
 
 ```bash
-sddl:start --tool cursor --file "/absolute/path/to/prd.md"
+sddl start --tool cursor --file "/absolute/path/to/prd.md"
 ```
 
 （可按用户要求加上 `--name ...` / `--fresh`。）

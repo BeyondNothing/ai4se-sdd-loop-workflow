@@ -1,7 +1,7 @@
 # 【已迁移】扩展规则配置不再放在引擎仓库 config/ 根下。
 #
 # 请在业务项目根执行：
-#   sddl:init
+#   sddl init
 #
 # 将生成（模板真源：config/sdd-loop-workflow-config/）：
 #   <业务根>/sdd-loop-workflow-config/workflow.yaml

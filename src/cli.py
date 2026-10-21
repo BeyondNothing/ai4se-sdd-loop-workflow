@@ -1,7 +1,7 @@
-"""sddl 命令入口。
+"""sddl 命令入口（macOS / Windows / Linux）。
 
-  sddl:init / sddl init
-  sddl:start / sddl start
+  通用: sddl init | sddl start | sddl-init | sddl-start
+  Unix 额外: sddl:init | sddl:start（Windows 文件名不能含 ':'）
 """
 
 from __future__ import annotations
@@ -24,12 +24,13 @@ AGENT_SKILL_DIRS = {
 }
 
 USAGE = """\
-用法:
-  sddl:init [--app-root DIR] [--workflow-root DIR]
-  sddl:start [start.sh 同样的选项...]
+用法（macOS / Windows / Linux 通用）:
+  sddl init [--app-root DIR] [--workflow-root DIR]
+  sddl start [start 脚本同样的选项...]
+  sddl-init ...
+  sddl-start ...
 
-  sddl init   # 同上
-  sddl start  # 同上
+Unix 也可: sddl:init / sddl:start（Windows 请用上面的空格或连字符形式）
 """
 
 
@@ -104,7 +105,7 @@ def find_engine_root(explicit: Path | None) -> Path:
 
     raise SystemExit(
         "错误: 找不到 workflow 引擎，请传入 --workflow-root。\n"
-        f"  例如: sddl:init --workflow-root /path/to/{ENGINE_DIR_NAME}\n"
+        f"  例如: sddl init --workflow-root /path/to/{ENGINE_DIR_NAME}\n"
         "  提示: 若用 pip 非 editable 安装，代码在 site-packages，不会自动带上引擎仓库；"
         "请把引擎 clone 到业务项目内/同级，或显式指定路径。"
     )
@@ -168,12 +169,12 @@ def install_app_config(engine: Path, app_root: Path) -> list[str]:
 
 def command_init(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        prog="sddl:init",
+        prog="sddl init",
         description=(
             "安装 start-workflow skill，并在业务根创建 sdd-loop-workflow-config"
             "（含 workflow.yaml / ai-rules）"
         ),
-    ) )
+    )
     parser.add_argument("--app-root", type=Path, default=None, help="业务项目根")
     parser.add_argument("--workflow-root", type=Path, default=None, help="引擎目录（含 start.sh）")
     args = parser.parse_args(argv)

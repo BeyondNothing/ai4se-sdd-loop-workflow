@@ -79,7 +79,7 @@ def load_ai_rules_config(app_root: Path) -> tuple[str, dict[str, list[str]]]:
     if not path.is_file():
         logger.warning(
             "未找到 %s，各节点将不注入扩展规则"
-            "（请在业务项目根执行 sddl:init）",
+            "（请在业务项目根执行 sddl init）",
             path,
         )
         return DEFAULT_AI_RULES_SUBDIR, {}
@@ -109,7 +109,7 @@ def load_app_runtime_settings(app_root: Path) -> dict[str, Any]:
     if not path.is_file():
         logger.warning(
             "未找到 %s，将使用引擎 config/workflow.yaml 中的兜底 docs_dir"
-            "（请在业务项目根执行 sddl:init）",
+            "（请在业务项目根执行 sddl init）",
             path,
         )
         return {}

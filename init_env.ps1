@@ -33,7 +33,7 @@ function Show-Usage {
 
 作用:
   创建/修复 .venv，将 pip 升到 >= 21.3，再执行 pip install -e .
-  不启动 workflow（启动请用 .\start.cmd 或 sddl:start）
+  不启动 workflow（启动请用 .\start.cmd 或 sddl start）
 
 选项:
   --force   强制删除并重建虚拟环境
@@ -225,5 +225,5 @@ if (Test-Path -LiteralPath $activatePs1) {
 if (Test-Path -LiteralPath $activateBat) {
     Write-Host "    激活 (cmd):        .\$VenvDir\Scripts\activate.bat"
 }
-Write-Host "    业务项目根执行: sddl:init"
-Write-Host "    启动 workflow:   sddl:start ...  或  .\start.cmd ..."
+Write-Host "    业务项目根执行: sddl init"
+Write-Host "    启动 workflow:   sddl start ...  或  .\start.cmd ..."
