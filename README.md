@@ -15,21 +15,17 @@ CLI（**macOS / Windows 通用**）：`sddl init` / `sddl start`，或 `sddl-ini
 git clone <本仓库地址>
 cd ai4se-sdd-loop-workflow
 
-# 推荐：一键初始化环境（venv + pip≥21.3 + pip install -e .）
-./init_env.sh          # macOS / Linux / Git Bash
+# 推荐：一键初始化（项目 .venv + 安装 + 把 venv 写入 PATH，免每次 activate）
+# 要求宿主 Python 为 3.10～3.14；旧 venv 不符时加 --force
+./init_env.sh            # macOS / Linux
 # Windows:  .\init_env.cmd
-# 强制重建: ./init_env.sh --force   或  .\init_env.cmd --force
+# 重建 venv: 加 --force；只装不改 PATH: 加 --skip-path
 ```
 
-也可手动：
+也可手动：用 **3.10～3.14** 执行 `python3 -m venv .venv` → 激活 → `python -m pip install -U "pip>=21.3"` → `pip install -e .`。  
+Windows 默认过旧时，`init_env.cmd` 会优先 `py -3.14`…`-3.10`（跳过 3.8 等），并把 `.venv\Scripts` 写入**用户 PATH**，新开终端即可直接 `sddl`，无需每次 activate。
 
-```bash
-python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-python -m pip install -U "pip>=21.3"                 # editable 安装必须 pip ≥ 21.3
-pip install -e .
-```
-
-装好后可在各个业务项目根目录直接用：
+装好后在业务项目根：
 
 ```bash
 sddl init
@@ -46,7 +42,7 @@ sddl start --tool cursor --name login             # 续跑，勿加 --fresh
 | `--fresh` | 清空该需求产出后重来 |
 | `--tool` | `cursor` / `claude_code` / `omp` / `echo` |
 
-需要 Python 3.10+、**pip ≥ 21.3** 和已登录的 AI CLI。Windows 上若 `pip install -e .` 报错，在引擎目录执行 `.\init_env.cmd`（必要时 `--force`）；脚本会建 venv、升级 pip/setuptools/wheel 再装包。
+需要 **Python 3.10～3.14**（不含 3.15+）、**pip ≥ 21.3** 和已登录的 AI CLI。
 
 ---
 

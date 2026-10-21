@@ -7,7 +7,7 @@ name = "ai4se-sdd-loop-workflow"
 version = "0.1.0"
 description = "LangGraph workflow: requirement → plan → tasks → code → tests"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.15"
 dependencies = [
     "langgraph>=0.2.0",
     "typing-extensions>=4.0.0",

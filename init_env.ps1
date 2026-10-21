@@ -1,18 +1,13 @@
-﻿# init_env.ps1 — 仅初始化本地环境（venv + pip>=21.3 + editable 安装），不启动 workflow
-# 本文件须以 UTF-8 BOM 保存，Windows PowerShell 5.1 才能正确解析中文。
+﻿# init_env.ps1 — 项目 venv + pip install -e .，并把 .venv\Scripts 写入用户 PATH（免每次 activate）
 # 推荐入口: .\init_env.cmd
-#
-# 注意: 不要把含 % / if 等的 Python 代码塞进 PowerShell 双引号 -c 字符串，
-# 否则 PS 5.1 会当成自己的运算符/关键字解析。版本检查尽量用 PS 解析命令输出。
+# 本文件须以 UTF-8 BOM 保存，供 Windows PowerShell 5.1 解析中文。
 $ErrorActionPreference = "Stop"
 try {
     $utf8 = New-Object System.Text.UTF8Encoding $false
     [Console]::InputEncoding = $utf8
     [Console]::OutputEncoding = $utf8
     $OutputEncoding = $utf8
-    $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-} catch {
-}
+} catch { }
 if (-not $env:PYTHONIOENCODING) { $env:PYTHONIOENCODING = 'utf-8' }
 if (-not $env:PYTHONUTF8) { $env:PYTHONUTF8 = '1' }
 try { chcp 65001 | Out-Null } catch { }
@@ -23,25 +18,27 @@ Set-Location $ScriptDir
 $VenvDir = if ($env:VENV_DIR) { $env:VENV_DIR } else { ".venv" }
 $MinPipMajor = 21
 $MinPipMinor = 3
+$PyMinMinor = 10
+$PyMaxMinor = 14
 $Force = $false
+$SkipPath = $false
 
 function Show-Usage {
     @"
 用法:
-  .\init_env.cmd [--force]
-  .\init_env.ps1 [--force]
+  .\init_env.cmd [--force] [--skip-path]
+  .\init_env.ps1 [--force] [--skip-path]
 
 作用:
-  创建/修复 .venv，将 pip 升到 >= 21.3，再执行 pip install -e .
-  不启动 workflow（启动请用 .\start.cmd 或 sddl start）
+  1. 用 Python 3.10～3.14 创建/复用项目 .venv
+  2. 升级 pip（>=21.3）并 pip install -e .
+  3. 把 .venv\Scripts 的绝对路径写入【用户 PATH】（办法 1：免每次 activate）
+  4. 同步到当前终端 PATH，立刻可试 sddl
 
 选项:
-  --force   强制删除并重建虚拟环境
+  --force       删除并重建 .venv
+  --skip-path   只装环境，不改用户 PATH
   -h, --help
-
-环境变量:
-  VENV_DIR      虚拟环境目录（默认 .venv）
-  PYTHON_BIN    优先使用的 Python 命令
 "@
 }
 
@@ -51,39 +48,39 @@ function Die([string]$Message) {
 }
 
 function Test-PythonCandidate($File, [string[]]$Prefix) {
-    # 跳过 Windows 商店占位符（WindowsApps\...python*.exe），否则会弹商店页
     if ($File -match '(?i)\\WindowsApps\\') { return $false }
     try {
         $out = & $File @($Prefix + @("--version")) 2>&1 | Out-String
         if ($LASTEXITCODE -ne 0) { return $false }
-        return ($out -match 'Python\s+3\.')
+        if ($out -notmatch 'Python\s+(\d+)\.(\d+)') { return $false }
+        $maj = [int]$Matches[1]
+        $min = [int]$Matches[2]
+        return ($maj -eq 3 -and $min -ge $PyMinMinor -and $min -le $PyMaxMinor)
     } catch {
         return $false
     }
 }
 
 function Resolve-PythonCommand {
-    # 同事机器常见：官方安装器提供 python / py；部分环境只有 python3。
-    # Windows 优先 py -3，再 python / python3；并校验 --version，避开商店 stub。
     $candidates = New-Object System.Collections.Generic.List[object]
     if ($env:PYTHON_BIN) {
-        $candidates.Add(@{ Name = $env:PYTHON_BIN; Prefix = @() }) | Out-Null
+        [void]$candidates.Add(@{ Name = $env:PYTHON_BIN; Prefix = @() })
     }
-    $candidates.Add(@{ Name = "py"; Prefix = @("-3") }) | Out-Null
-    $candidates.Add(@{ Name = "python"; Prefix = @() }) | Out-Null
-    $candidates.Add(@{ Name = "python3"; Prefix = @() }) | Out-Null
+    # 优先高版本：py -3.14 … -3.10，再 python / python3
+    foreach ($m in 14..10) {
+        [void]$candidates.Add(@{ Name = "py"; Prefix = @("-3.$m") })
+    }
+    [void]$candidates.Add(@{ Name = "py"; Prefix = @("-3") })
+    [void]$candidates.Add(@{ Name = "python"; Prefix = @() })
+    [void]$candidates.Add(@{ Name = "python3"; Prefix = @() })
 
     foreach ($c in $candidates) {
         $cmd = Get-Command $c.Name -ErrorAction SilentlyContinue
         if (-not $cmd) { continue }
-        $file = $cmd.Source
-        if (-not (Test-PythonCandidate $file $c.Prefix)) { continue }
-        return @{ File = $file; Prefix = $c.Prefix }
+        if (-not (Test-PythonCandidate $cmd.Source $c.Prefix)) { continue }
+        return @{ File = $cmd.Source; Prefix = $c.Prefix }
     }
-    Die @"
-未找到可用的 Python 3.10+（已试: py -3 / python / python3）。
-请安装 https://www.python.org/downloads/ （勾选 Add python.exe to PATH），或设置环境变量 PYTHON_BIN 指向 python.exe 全路径。
-"@
+    Die "未找到 Python 3.$PyMinMinor～3.$PyMaxMinor（已试 py -3.14… / python / python3）。请安装官网 Python 或设置 PYTHON_BIN。"
 }
 
 function Invoke-Python($Python, [string[]]$PyArgs) {
@@ -93,27 +90,20 @@ function Invoke-Python($Python, [string[]]$PyArgs) {
     }
 }
 
-function Get-PythonVersionPair($Python) {
-    # 用 --version 输出解析，避免 python -c 里出现 % / if 被 PS 误解析
+function Get-PythonVersionText($Python) {
     $out = & $Python.File @($Python.Prefix + @("--version")) 2>&1 | Out-String
-    if ($out -match 'Python\s+(\d+)\.(\d+)') {
-        return @{ Major = [int]$Matches[1]; Minor = [int]$Matches[2]; Text = "$($Matches[1]).$($Matches[2])" }
+    if ($out -match 'Python\s+(\d+\.\d+\.\d+|\d+\.\d+)') {
+        return $Matches[1]
     }
-    Die "无法解析 Python 版本: $out"
+    return $out.Trim()
 }
 
 function Test-VenvHealthy([string]$Dir) {
     $py = Join-Path $Dir "Scripts\python.exe"
-    if (-not (Test-Path -LiteralPath $py)) {
-        $py = Join-Path $Dir "bin\python"
-    }
     if (-not (Test-Path -LiteralPath $py)) { return $false }
     $activate = Join-Path $Dir "Scripts\Activate.ps1"
     if (-not (Test-Path -LiteralPath $activate)) {
         $activate = Join-Path $Dir "Scripts\activate.bat"
-    }
-    if (-not (Test-Path -LiteralPath $activate)) {
-        $activate = Join-Path $Dir "bin\activate"
     }
     if (-not (Test-Path -LiteralPath $activate)) { return $false }
     & $py -m pip --version 2>$null | Out-Null
@@ -123,18 +113,47 @@ function Test-VenvHealthy([string]$Dir) {
 function Test-PipMeetsMin([string]$Py) {
     $out = & $Py -m pip --version 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { return $false }
-    # 例: pip 24.2 from ...
     if ($out -match 'pip\s+(\d+)\.(\d+)') {
         $maj = [int]$Matches[1]
         $min = [int]$Matches[2]
         if ($maj -gt $MinPipMajor) { return $true }
         if ($maj -eq $MinPipMajor -and $min -ge $MinPipMinor) { return $true }
-        return $false
     }
     return $false
 }
 
-# ---------- parse args ----------
+function Assert-PythonExeInRange([string]$PyExe, [string]$Label) {
+    $out = & $PyExe --version 2>&1 | Out-String
+    if ($out -notmatch 'Python\s+(\d+)\.(\d+)') {
+        Die "$Label 无法解析版本: $out"
+    }
+    $maj = [int]$Matches[1]
+    $min = [int]$Matches[2]
+    if (-not ($maj -eq 3 -and $min -ge $PyMinMinor -and $min -le $PyMaxMinor)) {
+        Die "$Label 版本为 $maj.$min，需要 3.$PyMinMinor～3.$PyMaxMinor。请加 --force 重建 venv，或安装对应 Python。"
+    }
+}
+
+function Add-UserPath([string]$Entry) {
+    $entry = [System.IO.Path]::GetFullPath($Entry).TrimEnd('\')
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if (-not $userPath) { $userPath = "" }
+    $parts = $userPath -split ';' | Where-Object { $_ -and $_.Trim() -ne "" }
+    foreach ($p in $parts) {
+        try {
+            if ([System.IO.Path]::GetFullPath($p.TrimEnd('\')) -eq $entry) {
+                Write-Host "==> 用户 PATH 已包含: $entry"
+                return $false
+            }
+        } catch { }
+    }
+    $newPath = if ($userPath.Trim() -eq "") { $entry } else { "$userPath;$entry" }
+    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+    Write-Host "==> 已写入用户 PATH: $entry"
+    return $true
+}
+
+# ---------- args ----------
 $tokens = @($args)
 $i = 0
 while ($i -lt $tokens.Count) {
@@ -145,6 +164,9 @@ while ($i -lt $tokens.Count) {
     } elseif ($a -eq "--force") {
         $Force = $true
         $i++
+    } elseif ($a -eq "--skip-path") {
+        $SkipPath = $true
+        $i++
     } else {
         Die "未知参数: $a（见 --help）"
     }
@@ -152,14 +174,11 @@ while ($i -lt $tokens.Count) {
 
 # ---------- python / venv ----------
 $Python = Resolve-PythonCommand
-$ver = Get-PythonVersionPair $Python
-if ($ver.Major -lt 3 -or ($ver.Major -eq 3 -and $ver.Minor -lt 10)) {
-    Die "需要 Python 3.10+，当前: $($ver.Text)"
-}
-Write-Host "==> Python: $($Python.File) ($($ver.Text))"
+$verText = Get-PythonVersionText $Python
+Write-Host "==> Python: $($Python.File) $($Python.Prefix -join ' ') ($verText)"
 
 if ($Force -and (Test-Path -LiteralPath $VenvDir)) {
-    Write-Host "==> --force：删除虚拟环境 $VenvDir"
+    Write-Host "==> --force：删除 $VenvDir"
     Remove-Item -LiteralPath $VenvDir -Recurse -Force
 }
 
@@ -178,52 +197,51 @@ if (Test-VenvHealthy $VenvDir) {
         Die "创建虚拟环境失败: $VenvDir — $_"
     }
     if (-not (Test-VenvHealthy $VenvDir)) {
-        Die "虚拟环境创建后仍不可用（缺少 activate/pip），请检查 Python 是否带 ensurepip（Windows 安装时勾选 pip）"
+        Die "虚拟环境不可用，请确认 Python 安装时勾选 pip / ensurepip"
     }
 }
 
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $VenvPython)) {
-    $VenvPython = Join-Path $VenvDir "bin\python"
+    Die "未找到 $VenvPython"
 }
-if (-not (Test-Path -LiteralPath $VenvPython)) {
-    Die "虚拟环境不完整，未找到 python"
-}
+Assert-PythonExeInRange $VenvPython "虚拟环境 Python"
+Write-Host "==> 虚拟环境 Python 版本 OK（须为 3.$PyMinMinor～3.$PyMaxMinor）"
 
-Write-Host "==> 升级 pip / setuptools / wheel（editable 安装需要 pip >= $MinPipMajor.$MinPipMinor）"
+Write-Host "==> 升级 pip / setuptools / wheel"
 & $VenvPython -m pip install -U "pip>=$MinPipMajor.$MinPipMinor" setuptools wheel
-if ($LASTEXITCODE -ne 0) {
-    Die "升级 pip/setuptools/wheel 失败。可手动: `"$VenvPython`" -m pip install -U `"pip>=$MinPipMajor.$MinPipMinor`" setuptools wheel"
-}
+if ($LASTEXITCODE -ne 0) { Die "升级 pip 失败" }
 if (-not (Test-PipMeetsMin $VenvPython)) {
     Die "pip 仍低于 $MinPipMajor.$MinPipMinor"
 }
-$pipVer = & $VenvPython -m pip --version
-Write-Host "    $pipVer"
+Write-Host "    $(& $VenvPython -m pip --version)"
 
-Write-Host "==> 安装 ai4se-sdd-loop-workflow（editable: python -m pip install -e .）"
+Write-Host "==> pip install -e ."
 & $VenvPython -m pip install -e .
-if ($LASTEXITCODE -ne 0) {
-    $hint = @(
-        "pip install -e . 失败。请把完整报错贴出。"
-        "手动排查:"
-        "  `"$VenvPython`" -m pip --version"
-        "  `"$VenvPython`" -m pip install -U `"pip>=21.3`" setuptools wheel"
-        "  `"$VenvPython`" -m pip install -e ."
-        "常见原因: pip < 21.3、用了系统 pip 而不是 venv、路径含特殊字符、网络/代理。"
-    ) -join [Environment]::NewLine
-    Die $hint
+if ($LASTEXITCODE -ne 0) { Die "pip install -e . 失败" }
+
+$ScriptsDir = (Resolve-Path (Join-Path $VenvDir "Scripts")).Path
+$SddlExe = Join-Path $ScriptsDir "sddl.exe"
+if (-not (Test-Path -LiteralPath $SddlExe)) {
+    Die "安装后未找到 sddl.exe: $SddlExe"
 }
 
-Write-Host ""
-Write-Host "==> 环境就绪"
-$activatePs1 = Join-Path $VenvDir "Scripts\Activate.ps1"
-$activateBat = Join-Path $VenvDir "Scripts\activate.bat"
-if (Test-Path -LiteralPath $activatePs1) {
-    Write-Host "    激活 (PowerShell): .\$VenvDir\Scripts\Activate.ps1"
+# 当前会话立刻可用
+if ($env:Path -notlike "*$ScriptsDir*") {
+    $env:Path = "$ScriptsDir;$env:Path"
+    Write-Host "==> 已加入当前终端 PATH"
 }
-if (Test-Path -LiteralPath $activateBat) {
-    Write-Host "    激活 (cmd):        .\$VenvDir\Scripts\activate.bat"
+
+if (-not $SkipPath) {
+    [void](Add-UserPath $ScriptsDir)
+    Write-Host ""
+    Write-Host "==> 环境就绪（项目 venv + 用户 PATH）"
+    Write-Host "    请【新开一个终端】后任意目录执行: sddl init"
+    Write-Host "    本窗口也可直接试: sddl --help"
+} else {
+    Write-Host ""
+    Write-Host "==> 环境就绪（未改用户 PATH，--skip-path）"
+    Write-Host "    本窗口: sddl --help"
+    Write-Host "    或手动把下列目录加入用户 PATH:"
+    Write-Host "    $ScriptsDir"
 }
-Write-Host "    业务项目根执行: sddl init"
-Write-Host "    启动 workflow:   sddl start ...  或  .\start.cmd ..."

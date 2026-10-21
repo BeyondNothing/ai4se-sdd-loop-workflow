@@ -1,47 +1,73 @@
 #!/usr/bin/env bash
-# init_env.sh — 仅初始化本地环境（venv + pip≥21.3 + editable 安装），不启动 workflow
+# init_env.sh — 项目 venv + pip install -e .，并把 .venv/bin 写入 shell 配置（免每次 activate）
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 VENV_DIR="${VENV_DIR:-.venv}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+PYTHON_BIN="${PYTHON_BIN:-}"
 MIN_PIP="21.3"
 FORCE=0
+SKIP_PATH=0
+MARKER="# ai4se-sdd-loop-workflow venv PATH"
 
 usage() {
   cat <<'EOF'
 用法:
-  ./init_env.sh [--force]
-  Windows: .\init_env.cmd [--force]
+  ./init_env.sh [--force] [--skip-path]
 
 作用:
-  创建/修复 .venv，将 pip 升到 ≥ 21.3，再执行 pip install -e .
-  不启动 workflow（启动请用 ./start.sh 或 sddl start）
+  1. 用 Python 3.10～3.14 创建/复用项目 .venv
+  2. 升级 pip（≥21.3）并 pip install -e .
+  3. 把 .venv/bin 绝对路径写入 ~/.zshrc 或 ~/.bashrc（免每次 source activate）
+  4. 同步到当前 shell PATH
 
 选项:
-  --force   强制删除并重建虚拟环境
+  --force       删除并重建 .venv
+  --skip-path   只装环境，不改 shell 配置
   -h, --help
-
-环境变量:
-  VENV_DIR      虚拟环境目录（默认 .venv）
-  PYTHON_BIN    创建 venv 用的解释器（默认 python3）
 EOF
 }
 
-die() {
-  echo "错误: $*" >&2
-  exit 1
-}
+die() { echo "错误: $*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     --force) FORCE=1; shift ;;
-    *) die "未知参数: $1（见 --help）" ;;
+    --skip-path) SKIP_PATH=1; shift ;;
+    *) die "未知参数: $1" ;;
   esac
 done
+
+python_in_range() {
+  local bin="$1"
+  # 避免在 shell 里写复杂 -c；用 --version 解析
+  local out maj min
+  out="$("$bin" --version 2>&1 || true)"
+  [[ "$out" =~ Python[[:space:]]+([0-9]+)\.([0-9]+) ]] || return 1
+  maj="${BASH_REMATCH[1]}"
+  min="${BASH_REMATCH[2]}"
+  [[ "$maj" == "3" && "$min" -ge 10 && "$min" -le 14 ]]
+}
+
+pick_python() {
+  local c
+  if [[ -n "$PYTHON_BIN" ]]; then
+    command -v "$PYTHON_BIN" >/dev/null || die "PYTHON_BIN 不可用: $PYTHON_BIN"
+    python_in_range "$PYTHON_BIN" || die "PYTHON_BIN 版本不在 3.10～3.14: $("$PYTHON_BIN" --version 2>&1)"
+    echo "$PYTHON_BIN"
+    return
+  fi
+  for c in python3.14 python3.13 python3.12 python3.11 python3.10 python3 python; do
+    command -v "$c" >/dev/null 2>&1 || continue
+    python_in_range "$c" || continue
+    echo "$c"
+    return
+  done
+  die "未找到 Python 3.10～3.14"
+}
 
 venv_python() {
   if [[ -x "$VENV_DIR/bin/python" ]]; then
@@ -57,38 +83,16 @@ venv_is_healthy() {
   local py
   py="$(venv_python)"
   [[ -n "$py" ]] || return 1
-  if [[ ! -f "$VENV_DIR/bin/activate" && ! -f "$VENV_DIR/Scripts/activate.bat" ]]; then
-    return 1
-  fi
+  [[ -f "$VENV_DIR/bin/activate" || -f "$VENV_DIR/Scripts/activate.bat" ]] || return 1
   "$py" -m pip --version >/dev/null 2>&1
 }
 
-pip_meets_min() {
-  local py="$1"
-  "$py" -c "
-import sys
-from pip import __version__ as v
-parts = []
-for x in v.split('.')[:2]:
-    try:
-        parts.append(int(''.join(c for c in x if c.isdigit()) or '0'))
-    except ValueError:
-        parts.append(0)
-while len(parts) < 2:
-    parts.append(0)
-sys.exit(0 if tuple(parts[:2]) >= (21, 3) else 1)
-"
-}
-
-command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "未找到 $PYTHON_BIN，请先安装 Python 3.10+"
-
-PY_VERSION="$("$PYTHON_BIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
-PY_OK="$("$PYTHON_BIN" -c 'import sys; print(1 if sys.version_info >= (3, 10) else 0)')"
-[[ "$PY_OK" == "1" ]] || die "需要 Python 3.10+，当前: $PY_VERSION"
-echo "==> Python: $PYTHON_BIN ($PY_VERSION)"
+PY="$(pick_python)"
+PY_VERSION="$("$PY" --version 2>&1)"
+echo "==> Python: $PY ($PY_VERSION)（要求 3.10～3.14）"
 
 if [[ "$FORCE" -eq 1 && -e "$VENV_DIR" ]]; then
-  echo "==> --force：删除虚拟环境 $VENV_DIR"
+  echo "==> --force：删除 $VENV_DIR"
   rm -rf "$VENV_DIR"
 fi
 
@@ -101,28 +105,59 @@ else
   else
     echo "==> 创建虚拟环境: $VENV_DIR"
   fi
-  "$PYTHON_BIN" -m venv "$VENV_DIR" || die "创建虚拟环境失败: $VENV_DIR"
-  venv_is_healthy || die "虚拟环境创建后仍不可用（缺少 activate/pip），请检查 Python 是否带 ensurepip"
+  "$PY" -m venv "$VENV_DIR" || die "创建 venv 失败"
+  venv_is_healthy || die "venv 创建后不可用"
 fi
 
 VENV_PY="$(venv_python)"
-[[ -n "$VENV_PY" ]] || die "未找到虚拟环境 Python"
+[[ -n "$VENV_PY" ]] || die "未找到 venv python"
+python_in_range "$VENV_PY" || die "虚拟环境 Python 不在 3.10～3.14（$("$VENV_PY" --version 2>&1)）。请加 --force 重建"
+echo "==> 虚拟环境 Python 版本 OK"
 
-echo "==> 升级 pip / setuptools / wheel（editable 安装需要 pip ≥ $MIN_PIP）"
-"$VENV_PY" -m pip install -U "pip>=${MIN_PIP}" setuptools wheel || die "升级 pip/setuptools/wheel 失败"
-pip_meets_min "$VENV_PY" || die "pip 仍低于 $MIN_PIP，请检查网络或手动: $VENV_PY -m pip install -U 'pip>=${MIN_PIP}'"
-PIP_VER="$("$VENV_PY" -m pip --version | head -n1)"
-echo "    $PIP_VER"
+echo "==> 升级 pip / setuptools / wheel"
+"$VENV_PY" -m pip install -U "pip>=${MIN_PIP}" setuptools wheel || die "升级 pip 失败"
+echo "==> pip install -e ."
+"$VENV_PY" -m pip install -e . || die "pip install -e . 失败"
 
-echo "==> 安装 ai4se-sdd-loop-workflow（editable: python -m pip install -e .）"
-"$VENV_PY" -m pip install -e . || die "pip install -e . 失败。请把完整报错贴出；常见原因：pip < 21.3、未进 venv、网络/代理"
-
-echo
-echo "==> 环境就绪"
-if [[ -f "$VENV_DIR/bin/activate" ]]; then
-  echo "    激活: source $VENV_DIR/bin/activate"
+if [[ -d "$VENV_DIR/bin" ]]; then
+  BIN_DIR="$(cd "$VENV_DIR/bin" && pwd)"
 else
-  echo "    激活: $VENV_DIR\\Scripts\\activate"
+  BIN_DIR="$(cd "$VENV_DIR/Scripts" && pwd)"
 fi
-echo "    业务项目根执行: sddl init"
-echo "    启动 workflow:   sddl start ...  或  ./start.sh ..."
+command -v "$BIN_DIR/sddl" >/dev/null 2>&1 || [[ -x "$BIN_DIR/sddl" ]] || die "安装后未找到 sddl: $BIN_DIR/sddl"
+
+export PATH="$BIN_DIR:$PATH"
+echo "==> 已加入当前 shell PATH"
+
+if [[ "$SKIP_PATH" -eq 0 ]]; then
+  RC=""
+  if [[ -n "${ZSH_VERSION:-}" ]] || [[ "${SHELL:-}" == *zsh ]]; then
+    RC="$HOME/.zshrc"
+  elif [[ -n "${BASH_VERSION:-}" ]] || [[ "${SHELL:-}" == *bash ]]; then
+    RC="$HOME/.bashrc"
+  else
+    RC="$HOME/.zshrc"
+  fi
+  LINE="export PATH=\"$BIN_DIR:\$PATH\"  $MARKER"
+  if [[ -f "$RC" ]] && grep -qF "$MARKER" "$RC"; then
+    # 更新已有行
+    tmp="$(mktemp)"
+    grep -vF "$MARKER" "$RC" >"$tmp" || true
+    echo "$LINE" >>"$tmp"
+    mv "$tmp" "$RC"
+    echo "==> 已更新 $RC 中的 venv PATH"
+  else
+    {
+      echo ""
+      echo "$LINE"
+    } >>"$RC"
+    echo "==> 已写入 $RC"
+  fi
+  echo
+  echo "==> 环境就绪（项目 venv + shell PATH）"
+  echo "    请执行: source $RC   或新开终端后: sddl init"
+else
+  echo
+  echo "==> 环境就绪（未改 shell 配置，--skip-path）"
+  echo "    手动加入 PATH: $BIN_DIR"
+fi
