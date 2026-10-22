@@ -34,6 +34,8 @@ sddl start --tool cursor --name login --auto      # 无人值守
 sddl start --tool cursor --name login             # 续跑，勿加 --fresh
 ```
 
+`sddl start` / `start.cmd` **绝不**执行 `pip install`；未安装时会提示先跑 `init_env`。
+
 | 开关 | 作用 |
 |------|------|
 | `--file` | 需求文件 |

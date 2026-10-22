@@ -24,8 +24,9 @@ usage() {
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
   --auto                无人值守：禁止向用户提问，内容就绪后自动过门禁
   --fresh               清除已有产出（保留 00-requirement.md）后重来
-  --skip-install      跳过依赖安装（已装过时加速启动）
   -h, --help          显示帮助
+
+依赖安装请用 ./init_env.sh，本脚本不会执行 pip install。
 
 示例:
   # 调试：不调真实 AI，只跑通编排
@@ -87,7 +88,6 @@ ensure_venv() {
 }
 
 # ---------- parse args ----------
-SKIP_INSTALL=0
 TOOL=""
 DOCS_DIR=""
 REQ_NAME=""
@@ -105,8 +105,8 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    --skip-install)
-      SKIP_INSTALL=1
+    --skip-install|--force-install|-skip-install|-force-install)
+      # 兼容旧参数：忽略；安装一律走 init_env
       shift
       ;;
     --skip-clarification)
@@ -175,14 +175,19 @@ ensure_venv
 VENV_PY="$(venv_python)"
 [[ -n "$VENV_PY" ]] || die "未找到虚拟环境 Python"
 
-if [[ "$SKIP_INSTALL" -eq 0 ]]; then
-  echo "==> 升级 pip"
-  "$VENV_PY" -m pip install --upgrade pip >/dev/null
-  echo "==> 安装 ai4se-sdd-loop-workflow（editable，含 langgraph 等依赖）"
-  "$VENV_PY" -m pip install -e . || die "pip install -e . 失败"
-else
-  echo "==> 跳过依赖安装 (--skip-install)"
+package_installed() {
+  "$VENV_PY" -m pip show ai4se-sdd-loop-workflow >/dev/null 2>&1
+}
+
+if ! package_installed; then
+  die "尚未安装依赖，本启动脚本不会执行 pip install。
+请先在引擎目录执行:
+
+  ./init_env.sh
+
+然后再运行 sddl start / ./start.sh"
 fi
+echo "==> 依赖已安装（安装请用 ./init_env.sh，此处不执行 pip install）"
 
 # ---------- default requirement ----------
 if [[ -z "$REQ_FILE" && ${#REQ_TEXT[@]} -eq 0 ]]; then

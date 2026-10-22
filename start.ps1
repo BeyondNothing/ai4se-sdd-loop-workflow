@@ -1,4 +1,4 @@
-﻿# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow（Windows）
+# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow（Windows）
 # 本文件须以 UTF-8 BOM 保存，Windows PowerShell 5.1 才能正确解析中文。
 #
 # 注意: 禁止 python -c 传入含百分号格式化的代码；PS 5.1 解析阶段可能误判并级联报错。
@@ -37,8 +37,9 @@ function Show-Usage {
         '  -skip-clarification     跳过需求澄清 loop'
         '  -auto                   无人值守'
         '  -fresh                  清除已有产出后重来'
-        '  -skip-install           跳过依赖安装'
         '  -h, -help               显示帮助'
+        ''
+        '依赖安装请用 .\init_env.cmd，本脚本不会执行 pip install。'
         ''
         '示例:'
         '  .\start.cmd -tool echo -skip-clarification -file ..\docs\requirements\jwt-login-requirement.md -name jwt-login'
@@ -122,8 +123,8 @@ function Test-VenvHealthy([string]$Dir) {
 }
 
 # ---------- parse args ----------
-# 同时接受 GNU 风格长选项（两个减号）与单减号别名，比较时用单引号字面量，避免解析歧义
-$SkipInstall = $false
+# 同时接受 GNU 风格长选项与单减号别名；比较用单引号字面量
+# 本脚本永不 pip install；未安装时提示执行 init_env
 $SkipClarification = $false
 $AutoMode = $false
 $Fresh = $false
@@ -134,7 +135,8 @@ $ReqFile = ''
 $ReqText = New-Object System.Collections.Generic.List[string]
 
 $optHelp = @('-h', '-help', '--help')
-$optSkipInstall = @('-skip-install', '--skip-install')
+# 兼容旧参数：忽略，安装一律走 init_env
+$optIgnoredInstall = @('-skip-install', '--skip-install', '-force-install', '--force-install')
 $optSkipClarification = @('-skip-clarification', '--skip-clarification')
 $optAuto = @('-auto', '--auto')
 $optFresh = @('-fresh', '--fresh')
@@ -151,8 +153,7 @@ while ($i -lt $tokens.Count) {
     if ($optHelp -contains $a) {
         Show-Usage
         exit 0
-    } elseif ($optSkipInstall -contains $a) {
-        $SkipInstall = $true
+    } elseif ($optIgnoredInstall -contains $a) {
         $i++
     } elseif ($optSkipClarification -contains $a) {
         $SkipClarification = $true
@@ -240,15 +241,22 @@ if (-not ($vmaj -eq 3 -and $vmin -ge $PyMinMinor -and $vmin -le $PyMaxMinor)) {
     Die "venv Python 为 $vmaj.$vmin，需要 3.$PyMinMinor～3.$PyMaxMinor。请删除 .venv 后重跑，或先执行 init_env.cmd -force"
 }
 
-if (-not $SkipInstall) {
-    Write-Host '==> 升级 pip'
-    & $VenvPython -m pip install -U 'pip>=21.3' | Out-Null
-    Write-Host '==> 安装 ai4se-sdd-loop-workflow（editable）'
-    & $VenvPython -m pip install -e .
-    if ($LASTEXITCODE -ne 0) { Die 'pip install -e . 失败' }
-} else {
-    Write-Host '==> 跳过依赖安装 (-skip-install)'
+function Test-PackageInstalled([string]$Py) {
+    & $Py -m pip show ai4se-sdd-loop-workflow 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
 }
+
+if (-not (Test-PackageInstalled $VenvPython)) {
+    Die @"
+尚未安装依赖，本启动脚本不会执行 pip install。
+请先在引擎目录执行:
+
+  .\init_env.cmd
+
+然后再运行 sddl start / .\start.cmd
+"@
+}
+Write-Host '==> 依赖已安装（安装请用 init_env.cmd，此处不执行 pip install）'
 
 # ---------- default requirement ----------
 if (-not $ReqFile -and $ReqText.Count -eq 0) {

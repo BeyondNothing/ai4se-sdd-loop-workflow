@@ -191,12 +191,15 @@ def command_init(argv: list[str]) -> int:
 
 
 def command_start(argv: list[str]) -> int:
-    """转调引擎目录里的 start.sh / start.cmd，参数原样透传。
+    """转调引擎目录里的 start.sh / start.cmd。
 
     启动前把运行时 cwd 写入 SDD_LOOP_WORKFLOW_APP_ROOT，docs 产出落到该目录。
+
+    依赖须已由 ``init_env`` 安装；start 脚本不会执行 pip install。
     """
     engine = find_engine_root(None)
     os.environ["SDD_LOOP_WORKFLOW_APP_ROOT"] = str(Path.cwd().resolve())
+
     if sys.platform == "win32":
         script = engine / "start.cmd"
         if not script.is_file():
