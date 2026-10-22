@@ -1,7 +1,6 @@
 """sddl 命令入口（macOS / Windows / Linux）。
 
   通用: sddl init | sddl start | sddl-init | sddl-start
-  Unix 额外: sddl:init | sddl:start（Windows 文件名不能含 ':'）
 """
 
 from __future__ import annotations
@@ -29,8 +28,6 @@ USAGE = """\
   sddl start [start 脚本同样的选项...]
   sddl-init ...
   sddl-start ...
-
-Unix 也可: sddl:init / sddl:start（Windows 请用上面的空格或连字符形式）
 """
 
 
@@ -226,9 +223,10 @@ def main(argv: list[str] | None = None) -> None:
     else:
         invoked = ""
 
-    if invoked.endswith(":init") or invoked.endswith("-init"):
+    # 仅识别连字符入口（sddl-init.exe）；冒号入口已从 pyproject 移除（Windows 无法安装）
+    if invoked.endswith("-init"):
         raise SystemExit(command_init(argv))
-    if invoked.endswith(":start") or invoked.endswith("-start"):
+    if invoked.endswith("-start"):
         raise SystemExit(command_start(argv))
 
     if not argv or argv[0] in {"-h", "--help"}:
