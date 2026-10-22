@@ -1,4 +1,4 @@
-# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow（Windows）
+﻿# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow（Windows）
 # 本文件须以 UTF-8 BOM 保存，Windows PowerShell 5.1 才能正确解析中文。
 #
 # 注意: 禁止 python -c 传入含百分号格式化的代码；PS 5.1 解析阶段可能误判并级联报错。
