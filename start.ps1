@@ -242,8 +242,17 @@ if (-not ($vmaj -eq 3 -and $vmin -ge $PyMinMinor -and $vmin -le $PyMaxMinor)) {
 }
 
 function Test-PackageInstalled([string]$Py) {
-    & $Py -m pip show ai4se-sdd-loop-workflow 2>$null | Out-Null
-    return ($LASTEXITCODE -eq 0)
+    $previousPreference = $ErrorActionPreference
+    try {
+        # pip may warn about stale "~*" directories on stderr. Under Windows
+        # PowerShell 5.1 that warning must not become a terminating error.
+        $ErrorActionPreference = "SilentlyContinue"
+        & $Py -m pip show ai4se-sdd-loop-workflow 2>$null | Out-Null
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    return ($exitCode -eq 0)
 }
 
 if (-not (Test-PackageInstalled $VenvPython)) {
