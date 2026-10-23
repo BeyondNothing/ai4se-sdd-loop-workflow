@@ -5,7 +5,7 @@
 **快速接入、可按项目扩展**：业务侧 `sddl init` 即可用，规范与规则落在 `sdd-loop-workflow-config/`，不必改引擎；需要时再通过扩展 rule、prompt 与节点编排加深定制。
 
 CLI（**macOS / Windows 通用**）：`sddl init` / `sddl start`，或 `sddl-init` / `sddl-start`。  
-不要使用 `sddl:init`（命令名含 `:`，Windows 安装阶段就会失败）。
+
 ![workflow.jpeg](assets/img/workflow.jpeg)
 ---
 
