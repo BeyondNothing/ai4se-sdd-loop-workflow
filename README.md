@@ -6,7 +6,7 @@
 
 CLI（**macOS / Windows 通用**）：`sddl init` / `sddl start`，或 `sddl-init` / `sddl-start`。  
 不要使用 `sddl:init`（命令名含 `:`，Windows 安装阶段就会失败）。
-
+![workflow.jpeg](assets/img/workflow.jpeg)
 ---
 
 ## 1. 快速使用
