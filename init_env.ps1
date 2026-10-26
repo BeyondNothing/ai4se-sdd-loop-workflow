@@ -134,6 +134,25 @@ function Assert-PythonExeInRange([string]$PyExe, [string]$Label) {
     }
 }
 
+function Remove-StalePipArtifacts([string]$VenvRoot) {
+    $sitePackages = Join-Path $VenvRoot "Lib\site-packages"
+    if (-not (Test-Path -LiteralPath $sitePackages)) { return }
+
+    $staleItems = @(Get-ChildItem -LiteralPath $sitePackages -Force |
+        Where-Object { $_.Name.StartsWith("~") })
+    if ($staleItems.Count -eq 0) { return }
+
+    Write-Host "==> 清理 pip 残留目录/文件"
+    foreach ($item in $staleItems) {
+        Write-Host "    删除: $($item.FullName)"
+        try {
+            Remove-Item -LiteralPath $item.FullName -Recurse -Force -ErrorAction Stop
+        } catch {
+            Die "无法清理 pip 残留: $($item.FullName)。请关闭占用该 venv 的 Python/终端后重试。详情: $_"
+        }
+    }
+}
+
 function Add-UserPath([string]$Entry) {
     $entry = [System.IO.Path]::GetFullPath($Entry).TrimEnd('\')
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -207,6 +226,9 @@ if (-not (Test-Path -LiteralPath $VenvPython)) {
 }
 Assert-PythonExeInRange $VenvPython "虚拟环境 Python"
 Write-Host "==> 虚拟环境 Python 版本 OK（须为 3.$PyMinMinor～3.$PyMaxMinor）"
+
+$VenvRoot = (Resolve-Path $VenvDir).Path
+Remove-StalePipArtifacts $VenvRoot
 
 Write-Host "==> 升级 pip / setuptools / wheel"
 & $VenvPython -m pip install -U "pip>=$MinPipMajor.$MinPipMinor" setuptools wheel

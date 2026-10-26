@@ -5,8 +5,8 @@
 **快速接入、可按项目扩展**：业务侧 `sddl init` 即可用，规范与规则落在 `sdd-loop-workflow-config/`，不必改引擎；需要时再通过扩展 rule、prompt 与节点编排加深定制。
 
 CLI（**macOS / Windows 通用**）：`sddl init` / `sddl start`，或 `sddl-init` / `sddl-start`。  
-`sddl:init` 仅 Unix 可用（Windows 文件名不能含 `:`）。
 
+![workflow.jpeg](assets/img/workflow.jpeg)
 ---
 
 ## 1. 快速使用
@@ -33,6 +33,8 @@ sddl start --tool cursor --file "/path/to/prd.md" --name login
 sddl start --tool cursor --name login --auto      # 无人值守
 sddl start --tool cursor --name login             # 续跑，勿加 --fresh
 ```
+
+`sddl start` / `start.cmd` **绝不**执行 `pip install`；未安装时会提示先跑 `init_env`。
 
 | 开关 | 作用 |
 |------|------|

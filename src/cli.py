@@ -1,7 +1,6 @@
 """sddl 命令入口（macOS / Windows / Linux）。
 
   通用: sddl init | sddl start | sddl-init | sddl-start
-  Unix 额外: sddl:init | sddl:start（Windows 文件名不能含 ':'）
 """
 
 from __future__ import annotations
@@ -29,8 +28,6 @@ USAGE = """\
   sddl start [start 脚本同样的选项...]
   sddl-init ...
   sddl-start ...
-
-Unix 也可: sddl:init / sddl:start（Windows 请用上面的空格或连字符形式）
 """
 
 
@@ -194,12 +191,15 @@ def command_init(argv: list[str]) -> int:
 
 
 def command_start(argv: list[str]) -> int:
-    """转调引擎目录里的 start.sh / start.cmd，参数原样透传。
+    """转调引擎目录里的 start.sh / start.cmd。
 
     启动前把运行时 cwd 写入 SDD_LOOP_WORKFLOW_APP_ROOT，docs 产出落到该目录。
+
+    依赖须已由 ``init_env`` 安装；start 脚本不会执行 pip install。
     """
     engine = find_engine_root(None)
     os.environ["SDD_LOOP_WORKFLOW_APP_ROOT"] = str(Path.cwd().resolve())
+
     if sys.platform == "win32":
         script = engine / "start.cmd"
         if not script.is_file():
@@ -226,9 +226,10 @@ def main(argv: list[str] | None = None) -> None:
     else:
         invoked = ""
 
-    if invoked.endswith(":init") or invoked.endswith("-init"):
+    # 仅识别连字符入口（sddl-init.exe）；冒号入口已从 pyproject 移除（Windows 无法安装）
+    if invoked.endswith("-init"):
         raise SystemExit(command_init(argv))
-    if invoked.endswith(":start") or invoked.endswith("-start"):
+    if invoked.endswith("-start"):
         raise SystemExit(command_start(argv))
 
     if not argv or argv[0] in {"-h", "--help"}:
